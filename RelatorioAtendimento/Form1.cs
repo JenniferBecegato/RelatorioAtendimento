@@ -1,100 +1,77 @@
+#nullable disable
 using ClosedXML.Excel;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Drawing;
-using System.Drawing.Drawing2D;
+using System.Drawing.Printing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Windows.Forms;
+
+using Font = System.Drawing.Font;
+using Point = System.Drawing.Point;
+using Size = System.Drawing.Size;
+using Color = System.Drawing.Color;
+using Rectangle = System.Drawing.Rectangle;
+using Graphics = System.Drawing.Graphics;
+using Bitmap = System.Drawing.Bitmap;
+using Pen = System.Drawing.Pen;
 
 namespace RelatorioAtendimento
 {
     public partial class Form1 : Form
     {
-        // =========================================================
+        // ============================================================
         // CORES
-        // =========================================================
-        private readonly Color CorSidebar = Color.FromArgb(10, 67, 56);
-        private readonly Color CorSidebarHover = Color.FromArgb(18, 93, 76);
-        private readonly Color CorVerde = Color.FromArgb(23, 145, 92);
-        private readonly Color CorVerdeEscuro = Color.FromArgb(9, 102, 73);
-        private readonly Color CorFundo = Color.FromArgb(245, 247, 250);
-        private readonly Color CorTexto = Color.FromArgb(28, 42, 57);
-        private readonly Color CorCinza = Color.FromArgb(105, 115, 125);
-        private readonly Color CorBorda = Color.FromArgb(220, 225, 230);
-        private readonly Color CorVermelho = Color.FromArgb(210, 54, 54);
-        private readonly Color CorAzul = Color.FromArgb(41, 112, 211);
-        private readonly Color CorAmarelo = Color.FromArgb(215, 158, 30);
+        // ============================================================
+        private readonly Color CorFundo = Color.FromArgb(232, 236, 240);
+        private readonly Color CorSidebar = Color.FromArgb(9, 76, 64);
+        private readonly Color CorSidebarAtivo = Color.FromArgb(16, 116, 94);
+        private readonly Color CorVerde = Color.FromArgb(20, 150, 96);
+        private readonly Color CorVerdeClaro = Color.FromArgb(234, 248, 240);
+        private readonly Color CorVermelho = Color.FromArgb(214, 55, 55);
+        private readonly Color CorVermelhoClaro = Color.FromArgb(253, 239, 239);
+        private readonly Color CorAzul = Color.FromArgb(37, 99, 235);
+        private readonly Color CorAzulClaro = Color.FromArgb(238, 244, 255);
+        private readonly Color CorAmarelo = Color.FromArgb(194, 132, 18);
+        private readonly Color CorAmareloClaro = Color.FromArgb(255, 249, 229);
+        private readonly Color CorTexto = Color.FromArgb(20, 35, 50);
+        private readonly Color CorTextoSecundario = Color.FromArgb(92, 105, 120);
+        private readonly Color CorBorda = Color.FromArgb(221, 227, 233);
 
-        private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
+        // ============================================================
+        // ESTADO
+        // ============================================================
+        private string caminhoAnterior = "";
+        private string caminhoAtual = "";
+        private DadosMes dadosAnterior;
+        private DadosMes dadosAtual;
+        private bool comparacaoRealizada = false;
 
-        // =========================================================
-        // ARQUIVOS
-        // =========================================================
-        private string caminhoMesRetrasado = string.Empty;
-        private string caminhoMesPassado = string.Empty;
-
-        // Relatórios mantidos em memória depois de clicar em Comparar.
-        private RelatorioMensal? relatorioAnteriorAtual;
-        private RelatorioMensal? relatorioAtualAtual;
-
-        // Navegação
-        private Panel painelPaginas = null!;
-        private AppPage paginaAtual = AppPage.Comparativo;
-        private readonly Dictionary<AppPage, Button> botoesMenu = new Dictionary<AppPage, Button>();
-
-        private enum AppPage
-        {
-            Comparativo,
-            Resumo,
-            Atendentes,
-            Motivos,
-            Marketing,
-            Qualidade,
-            Exportar
-        }
-
-        // =========================================================
-        // CONTROLES
-        // =========================================================
-        private TextBox txtMesRetrasado = null!;
-        private TextBox txtMesPassado = null!;
-        private Label lblPeriodo1 = null!;
-        private Label lblPeriodo2 = null!;
-        private Label lblStatus = null!;
-
-        private DataGridView dgvAtendentes = null!;
-        private ComparisonBarChart graficoMotivos = null!;
-
-        private Label lblResumoTexto = null!;
-        private Label lblAlertasTexto = null!;
-        private Label lblOportunidadesTexto = null!;
-        private Label lblAcoesTexto = null!;
-        private Label lblDestaquesTexto = null!;
-        private Label lblIntegridadeTexto = null!;
-
-        private KpiView kpiConversas = null!;
-        private KpiView kpiFinalizados = null!;
-        private KpiView kpiTaxaFinalizacao = null!;
-        private KpiView kpiReagendamentos = null!;
-        private KpiView kpiNovosContatos = null!;
-        private KpiView kpiNotaMedia = null!;
+        // ============================================================
+        // CONTROLES PRINCIPAIS
+        // ============================================================
+        private Panel pnlConteudo;
+        private TextBox txtAnterior;
+        private TextBox txtAtual;
+        private Label lblPeriodoAnterior;
+        private Label lblPeriodoAtual;
+        private Label lblStatus;
+        private FlowLayoutPanel pnlMenu;
+        private readonly Dictionary<string, Button> botoesMenu = new();
 
         public Form1()
         {
             InitializeComponent();
-            CriarTela();
-            LimparDados(false);
+            MontarTela();
         }
 
-        // =========================================================
-        // TELA
-        // =========================================================
-        private void CriarTela()
+        // ============================================================
+        // TELA BASE
+        // ============================================================
+        private void MontarTela()
         {
             SuspendLayout();
             Controls.Clear();
@@ -102,2600 +79,1750 @@ namespace RelatorioAtendimento
             Text = "Relatório de Atendimento - Comparativo Mensal";
             StartPosition = FormStartPosition.CenterScreen;
             WindowState = FormWindowState.Maximized;
-            MinimumSize = new Size(1200, 720);
+            MinimumSize = new Size(1180, 720);
             BackColor = CorFundo;
             Font = new Font("Segoe UI", 9F);
-            DoubleBuffered = true;
+            AutoScaleMode = AutoScaleMode.Dpi;
 
-            TableLayoutPanel estrutura = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 1,
-                BackColor = CorFundo,
-                Margin = Padding.Empty,
-                Padding = Padding.Empty
-            };
-
-            estrutura.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 205));
-            estrutura.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            estrutura.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-            estrutura.Controls.Add(CriarSidebar(), 0, 0);
-
-            painelPaginas = new Panel
+            // Estrutura simples e estável: menu fixo à esquerda e conteúdo ocupando o restante.
+            var estrutura = new Panel
             {
                 Dock = DockStyle.Fill,
                 BackColor = CorFundo
             };
-            estrutura.Controls.Add(painelPaginas, 1, 0);
+
+            var areaDireita = CriarAreaDireita();
+            areaDireita.Dock = DockStyle.Fill;
+
+            var sidebar = CriarSidebar();
+            sidebar.Dock = DockStyle.Left;
+            sidebar.Width = 210;
+
+            // A ordem garante que o painel esquerdo reserve os 210px e o conteúdo use o restante.
+            estrutura.Controls.Add(areaDireita);
+            estrutura.Controls.Add(sidebar);
 
             Controls.Add(estrutura);
 
-            MostrarPagina(AppPage.Comparativo);
+            MostrarPagina("Comparativo");
             ResumeLayout(true);
         }
 
         private Control CriarSidebar()
         {
-            Panel sidebar = new Panel
+            var sidebar = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                BackColor = CorSidebar
+                BackColor = CorSidebar,
+                ColumnCount = 1,
+                RowCount = 3,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
             };
 
-            Panel cabecalho = new Panel
-            {
-                Dock = DockStyle.Top,
-                Height = 105,
-                BackColor = CorSidebar
-            };
+            sidebar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            sidebar.RowStyles.Add(new RowStyle(SizeType.Absolute, 112F));
+            sidebar.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            sidebar.RowStyles.Add(new RowStyle(SizeType.Absolute, 145F));
 
-            cabecalho.Controls.Add(new Label
+            var titulo = new Label
             {
+                Dock = DockStyle.Fill,
                 Text = "RELATÓRIO\nDE ATENDIMENTO",
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI Semibold", 13F, FontStyle.Bold),
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter
-            });
+                TextAlign = ContentAlignment.MiddleCenter,
+                Margin = Padding.Empty
+            };
 
-            FlowLayoutPanel menu = new FlowLayoutPanel
+            pnlMenu = new FlowLayoutPanel
             {
-                Dock = DockStyle.Top,
-                Height = 430,
+                Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
+                AutoScroll = false,
                 BackColor = CorSidebar,
-                Padding = new Padding(0, 8, 0, 0)
+                Padding = new Padding(0, 4, 0, 0),
+                Margin = Padding.Empty
             };
 
-            menu.Controls.Add(CriarBotaoMenu("▥   Comparativo", AppPage.Comparativo));
-            menu.Controls.Add(CriarBotaoMenu("▣   Resumo Executivo", AppPage.Resumo));
-            menu.Controls.Add(CriarBotaoMenu("●   Atendentes", AppPage.Atendentes));
-            menu.Controls.Add(CriarBotaoMenu("◆   Motivos", AppPage.Motivos));
-            menu.Controls.Add(CriarBotaoMenu("▲   Marketing", AppPage.Marketing));
-            menu.Controls.Add(CriarBotaoMenu("✓   Qualidade dos Dados", AppPage.Qualidade));
-            menu.Controls.Add(CriarBotaoMenu("⇩   Exportar", AppPage.Exportar));
+            AdicionarBotaoMenu("Comparativo", "▣");
+            AdicionarBotaoMenu("Atendentes", "●");
+            AdicionarBotaoMenu("Motivos", "◆");
+            AdicionarBotaoMenu("Marketing", "▲");
+            AdicionarBotaoMenu("Qualidade", "✓");
+            AdicionarBotaoMenu("Exportar", "⇩");
 
-            Panel rodape = new Panel
+            var dica = new Label
             {
-                Dock = DockStyle.Bottom,
-                Height = 150,
-                BackColor = CorSidebar
-            };
-
-            rodape.Controls.Add(new Label
-            {
-                Text = "Transformando dados\nem informações para\nmelhores decisões.",
-                ForeColor = Color.FromArgb(200, 225, 218),
-                Font = new Font("Segoe UI", 10F),
-                AutoSize = false,
                 Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleCenter
-            });
+                Text = "VISÃO RÁPIDA\nna tela principal\n\nDETALHES\nno menu acima",
+                ForeColor = Color.FromArgb(210, 235, 229),
+                Font = new Font("Segoe UI", 9.2F),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Margin = Padding.Empty
+            };
 
-            sidebar.Controls.Add(rodape);
-            sidebar.Controls.Add(menu);
-            sidebar.Controls.Add(cabecalho);
+            sidebar.Controls.Add(titulo, 0, 0);
+            sidebar.Controls.Add(pnlMenu, 0, 1);
+            sidebar.Controls.Add(dica, 0, 2);
 
             return sidebar;
         }
 
-        private Button CriarBotaoMenu(string texto, AppPage pagina)
+        private void AdicionarBotaoMenu(string nome, string icone)
         {
-            Button btn = new Button
+            var btn = new Button
             {
-                Width = 205,
-                Height = 49,
-                Text = texto,
+                Name = "btn" + nome,
+                Text = $"{icone}   {nome}",
+                Width = 210,
+                Height = 50,
+                FlatStyle = FlatStyle.Flat,
+                FlatAppearance = { BorderSize = 0 },
+                BackColor = CorSidebar,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 10F),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Padding = new Padding(22, 0, 0, 0),
-                ForeColor = Color.White,
-                BackColor = CorSidebar,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 10F),
                 Cursor = Cursors.Hand,
-                Tag = pagina
+                Tag = nome
             };
 
-            btn.FlatAppearance.BorderSize = 0;
-
-            btn.Click += (s, e) => MostrarPagina(pagina);
-
-            btn.MouseEnter += (s, e) =>
+            btn.Click += (_, _) => MostrarPagina(nome);
+            btn.MouseEnter += (_, _) =>
             {
-                if (paginaAtual != pagina)
-                    btn.BackColor = CorSidebarHover;
+                if (btn.BackColor != CorSidebarAtivo)
+                    btn.BackColor = Color.FromArgb(12, 91, 76);
             };
-
-            btn.MouseLeave += (s, e) =>
+            btn.MouseLeave += (_, _) =>
             {
-                if (paginaAtual != pagina)
+                if ((string)btn.Tag != PaginaAtual)
                     btn.BackColor = CorSidebar;
             };
 
-            botoesMenu[pagina] = btn;
-            return btn;
+            botoesMenu[nome] = btn;
+            pnlMenu.Controls.Add(btn);
         }
 
-        private Control CriarConteudoPrincipal()
+        private string PaginaAtual { get; set; } = "Comparativo";
+
+        private Control CriarAreaDireita()
         {
-            TableLayoutPanel principal = new TableLayoutPanel
+            var baseDireita = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                BackColor = CorFundo,
                 ColumnCount = 1,
-                RowCount = 6,
-                Padding = new Padding(14, 10, 14, 10)
+                RowCount = 3,
+                BackColor = CorFundo,
+                Padding = new Padding(18, 14, 18, 12)
             };
 
-            principal.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            principal.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
-            principal.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
-            principal.RowStyles.Add(new RowStyle(SizeType.Absolute, 124));
-            principal.RowStyles.Add(new RowStyle(SizeType.Absolute, 215));
-            principal.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            principal.RowStyles.Add(new RowStyle(SizeType.Absolute, 55));
+            baseDireita.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            baseDireita.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
+            baseDireita.RowStyles.Add(new RowStyle(SizeType.Absolute, 94));
+            baseDireita.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            principal.Controls.Add(CriarCabecalho(), 0, 0);
-            principal.Controls.Add(CriarAreaImportacao(), 0, 1);
-            principal.Controls.Add(CriarKpis(), 0, 2);
-            principal.Controls.Add(CriarAnalise(), 0, 3);
-            principal.Controls.Add(CriarParteInferior(), 0, 4);
-            principal.Controls.Add(CriarRodape(), 0, 5);
+            baseDireita.Controls.Add(CriarCabecalho(), 0, 0);
+            baseDireita.Controls.Add(CriarImportacao(), 0, 1);
 
-            return principal;
+            pnlConteudo = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorFundo
+            };
+            baseDireita.Controls.Add(pnlConteudo, 0, 2);
+
+            return baseDireita;
         }
 
         private Control CriarCabecalho()
         {
-            Panel panel = new Panel { Dock = DockStyle.Fill };
+            var p = new Panel { Dock = DockStyle.Fill };
 
-            Label titulo = new Label
+            var titulo = new Label
             {
+                AutoSize = true,
+                Location = new Point(4, 2),
                 Text = "Relatório de Atendimento - Comparativo Mensal",
                 Font = new Font("Segoe UI Semibold", 20F, FontStyle.Bold),
-                ForeColor = CorTexto,
-                AutoSize = true,
-                Location = new Point(8, 5)
+                ForeColor = CorTexto
             };
 
-            Label subtitulo = new Label
+            var subtitulo = new Label
             {
-                Text = "Compare dois arquivos do Excel e descubra os principais insights para a gestão do atendimento.",
-                Font = new Font("Segoe UI", 10.5F),
-                ForeColor = CorCinza,
                 AutoSize = true,
-                Location = new Point(11, 43)
+                Location = new Point(7, 42),
+                Text = "Simples: veja quem melhorou, quem precisa de atenção e o que mudou no mês.",
+                Font = new Font("Segoe UI", 10F),
+                ForeColor = CorTextoSecundario
             };
 
-            Label data = new Label
+            var versao = new Label
             {
-                Text = "Versão 1.0.0\n" + DateTime.Now.ToString("dd/MM/yyyy  HH:mm"),
-                Font = new Font("Segoe UI", 8.5F),
-                ForeColor = CorCinza,
-                AutoSize = false,
                 Width = 190,
-                Height = 46,
+                Height = 42,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 TextAlign = ContentAlignment.TopRight,
-                Anchor = AnchorStyles.Top | AnchorStyles.Right
+                Text = $"Versão 2.0\n{DateTime.Now:dd/MM/yyyy HH:mm}",
+                Font = new Font("Segoe UI", 7.7F),
+                ForeColor = CorTextoSecundario
             };
 
-            panel.Controls.Add(titulo);
-            panel.Controls.Add(subtitulo);
-            panel.Controls.Add(data);
+            p.Controls.Add(titulo);
+            p.Controls.Add(subtitulo);
+            p.Controls.Add(versao);
 
-            panel.Resize += (s, e) =>
-            {
-                data.Location = new Point(Math.Max(0, panel.ClientSize.Width - data.Width - 10), 7);
-            };
+            p.Resize += (_, _) => versao.Location = new Point(Math.Max(0, p.ClientSize.Width - 195), 3);
 
-            return panel;
+            return p;
         }
 
-        // =========================================================
-        // IMPORTAÇÃO
-        // =========================================================
-        private Control CriarAreaImportacao()
+        private Control CriarImportacao()
         {
-            TableLayoutPanel area = new TableLayoutPanel
+            var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 3,
                 RowCount = 1,
-                Padding = new Padding(0, 4, 0, 6)
+                BackColor = CorFundo,
+                Padding = new Padding(0, 3, 0, 6),
+                Margin = Padding.Empty
             };
 
-            area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42F));
-            area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42F));
-            area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16F));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 43.5F));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 43.5F));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 13F));
 
-            area.Controls.Add(
-                CriarCardImportacao("1. Mês retrasado", out txtMesRetrasado, out lblPeriodo1, EscolherMesRetrasado),
-                0, 0);
+            var cardAnterior = CriarCardArquivo(
+                "1. Mês retrasado",
+                out txtAnterior,
+                out lblPeriodoAnterior,
+                SelecionarAnterior);
 
-            area.Controls.Add(
-                CriarCardImportacao("2. Mês passado", out txtMesPassado, out lblPeriodo2, EscolherMesPassado),
-                1, 0);
+            var cardAtual = CriarCardArquivo(
+                "2. Mês passado",
+                out txtAtual,
+                out lblPeriodoAtual,
+                SelecionarAtual);
 
-            Button btnComparar = new Button
+            layout.Controls.Add(cardAnterior, 0, 0);
+            layout.Controls.Add(cardAtual, 1, 0);
+
+            // Terceiro bloco: botão Comparar dentro de um card com contorno.
+            var btnComparar = new Button
             {
-                Text = "Comparar",
                 Dock = DockStyle.Fill,
-                Margin = new Padding(8, 10, 4, 10),
+                Text = "Comparar",
                 BackColor = CorVerde,
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold),
-                Cursor = Cursors.Hand
+                Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+                Margin = new Padding(8, 10, 2, 10)
             };
 
             btnComparar.FlatAppearance.BorderSize = 0;
             btnComparar.Click += BtnComparar_Click;
 
-            area.Controls.Add(btnComparar, 2, 0);
-            return area;
+            layout.Controls.Add(btnComparar, 2, 0);
+
+            return layout;
         }
 
-        private Control CriarCardImportacao(
+        private Control CriarCardArquivo(
             string titulo,
-            out TextBox txtArquivo,
-            out Label lblPeriodo,
+            out TextBox txt,
+            out Label periodo,
             EventHandler evento)
         {
-            RoundedPanel card = new RoundedPanel
+            var card = new Panel
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(4),
                 BackColor = Color.White,
-                BorderColor = CorBorda,
-                Radius = 10
+                Margin = new Padding(0, 3, 4, 3),
+                Padding = new Padding(11, 7, 11, 7)
             };
 
-            TableLayoutPanel layout = new TableLayoutPanel
+            var grid = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
                 RowCount = 3,
-                Padding = new Padding(12, 7, 12, 7)
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
             };
 
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 19F));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 29F));
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
-            Label lblTitulo = new Label
+            var lbl = new Label
             {
-                Text = titulo,
                 Dock = DockStyle.Fill,
-                Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold),
+                Text = titulo,
+                Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold),
                 ForeColor = CorTexto,
-                TextAlign = ContentAlignment.MiddleLeft
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty
             };
 
-            TableLayoutPanel linhaArquivo = new TableLayoutPanel
+            var linha = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty
+            };
+
+            linha.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            linha.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96F));
+
+            txt = new TextBox
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                Text = "Nenhum arquivo selecionado",
+                Font = new Font("Segoe UI", 8.4F),
+                Margin = new Padding(0, 2, 0, 2)
+            };
+
+            var btn = new Button
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(7, 2, 0, 2),
+                Text = "Selecionar",
+                BackColor = Color.FromArgb(241, 248, 245),
+                ForeColor = CorSidebar,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand,
+                Font = new Font("Segoe UI", 8.3F)
+            };
+
+            btn.FlatAppearance.BorderSize = 0;
+            btn.Click += evento;
+
+            linha.Controls.Add(txt, 0, 0);
+            linha.Controls.Add(btn, 1, 0);
+
+            periodo = new Label
+            {
+                Dock = DockStyle.Fill,
+                Text = "Período: aguardando arquivo...",
+                ForeColor = CorTextoSecundario,
+                Font = new Font("Segoe UI", 7.7F),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty
+            };
+
+            grid.Controls.Add(lbl, 0, 0);
+            grid.Controls.Add(linha, 0, 1);
+            grid.Controls.Add(periodo, 0, 2);
+
+            card.Controls.Add(grid);
+            return card;
+        }
+
+        // ============================================================
+        // NAVEGAÇÃO
+        // ============================================================
+        private void MostrarPagina(string pagina)
+        {
+            PaginaAtual = pagina;
+
+            foreach (var par in botoesMenu)
+                par.Value.BackColor = par.Key == pagina ? CorSidebarAtivo : CorSidebar;
+
+            pnlConteudo.Controls.Clear();
+
+            Control paginaControl = pagina switch
+            {
+                "Comparativo" => CriarPaginaComparativo(),
+                "Atendentes" => CriarPaginaAtendentes(),
+                "Motivos" => CriarPaginaMotivos(),
+                "Marketing" => CriarPaginaMarketing(),
+                "Qualidade" => CriarPaginaQualidade(),
+                "Exportar" => CriarPaginaExportar(),
+                _ => CriarPaginaComparativo()
+            };
+
+            paginaControl.Dock = DockStyle.Fill;
+            pnlConteudo.Controls.Add(paginaControl);
+        }
+
+        // ============================================================
+        // PÁGINA PRINCIPAL - SIMPLES
+        // ============================================================
+        private Control CriarPaginaComparativo()
+        {
+            var corpo = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 6,
+                BackColor = CorFundo,
+                Padding = new Padding(0, 8, 0, 4),
+                Margin = Padding.Empty
+            };
+
+            corpo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+
+            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 96F));   // KPIs
+            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 116F));  // TMR
+            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 116F));  // TME
+            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 116F));  // Atendimentos + Notas
+            corpo.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));   // Resumo
+            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));   // Rodapé
+
+            corpo.Controls.Add(CriarLinhaKpisSimples(), 0, 0);
+            corpo.Controls.Add(CriarLinhaMudancasTmr(), 0, 1);
+            corpo.Controls.Add(CriarLinhaMudancasTme(), 0, 2);
+            corpo.Controls.Add(CriarLinhaEquipe(), 0, 3);
+            corpo.Controls.Add(CriarResumoSimples(), 0, 4);
+            corpo.Controls.Add(CriarBarraInferior(), 0, 5);
+
+            return corpo;
+        }
+
+        private Control CriarLinhaKpisSimples()
+        {
+            var grid = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 4,
+                RowCount = 1
+            };
+            for (int i = 0; i < 4; i++)
+                grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+
+            if (!comparacaoRealizada)
+            {
+                grid.Controls.Add(CriarKpiVazio("Conversas"), 0, 0);
+                grid.Controls.Add(CriarKpiVazio("Finalizados"), 1, 0);
+                grid.Controls.Add(CriarKpiVazio("Novos contatos"), 2, 0);
+                grid.Controls.Add(CriarKpiVazio("Nota geral"), 3, 0);
+                return grid;
+            }
+
+            grid.Controls.Add(CriarKpiComparacao(
+                "Conversas",
+                dadosAnterior.Conversas,
+                dadosAtual.Conversas,
+                false), 0, 0);
+
+            grid.Controls.Add(CriarKpiComparacao(
+                "Finalizados",
+                dadosAnterior.Finalizados,
+                dadosAtual.Finalizados,
+                false), 1, 0);
+
+            grid.Controls.Add(CriarKpiComparacao(
+                "Novos contatos",
+                dadosAnterior.NovosContatos,
+                dadosAtual.NovosContatos,
+                false), 2, 0);
+
+            grid.Controls.Add(CriarKpiNota(), 3, 0);
+            return grid;
+        }
+
+        private Control CriarKpiVazio(string titulo)
+        {
+            var card = CriarCard(Color.White);
+            card.Margin = new Padding(5);
+
+            var lbl = new Label
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(14, 12, 10, 8),
+                Text = $"{titulo}\n\n—",
+                Font = new Font("Segoe UI Semibold", 10F),
+                ForeColor = CorTexto
+            };
+            card.Controls.Add(lbl);
+            return card;
+        }
+
+        private Control CriarKpiComparacao(string titulo, double anterior, double atual, bool percentual)
+        {
+            double variacao = CalcularPercentual(anterior, atual);
+            Color cor = variacao >= 0 ? CorVerde : CorVermelho;
+            string seta = variacao >= 0 ? "▲" : "▼";
+
+            var card = CriarCard(Color.White);
+            card.Margin = new Padding(5);
+
+            string atualTexto = percentual
+                ? $"{atual:N1}%"
+                : $"{atual:N0}";
+
+            string antTexto = percentual
+                ? $"{anterior:N1}%"
+                : $"{anterior:N0}";
+
+            var tituloLbl = new Label
+            {
+                AutoSize = true,
+                Location = new Point(14, 10),
+                Text = titulo,
+                Font = new Font("Segoe UI", 9F),
+                ForeColor = CorTextoSecundario
+            };
+
+            var valor = new Label
+            {
+                AutoSize = true,
+                Location = new Point(14, 32),
+                Text = atualTexto,
+                Font = new Font("Segoe UI Semibold", 15F, FontStyle.Bold),
+                ForeColor = CorTexto
+            };
+
+            var varLbl = new Label
+            {
+                AutoSize = true,
+                Location = new Point(14, 65),
+                Text = $"{seta} {Math.Abs(variacao):N1}%   (antes {antTexto})",
+                Font = new Font("Segoe UI Semibold", 8.8F, FontStyle.Bold),
+                ForeColor = cor
+            };
+
+            card.Controls.Add(tituloLbl);
+            card.Controls.Add(valor);
+            card.Controls.Add(varLbl);
+            return card;
+        }
+
+        private Control CriarKpiNota()
+        {
+            double dif = dadosAtual.NotaGeral - dadosAnterior.NotaGeral;
+            Color cor = Math.Abs(dif) < 0.01 ? CorTextoSecundario : dif > 0 ? CorVerde : CorVermelho;
+            string seta = Math.Abs(dif) < 0.01 ? "●" : dif > 0 ? "▲" : "▼";
+
+            var card = CriarCard(Color.White);
+            card.Margin = new Padding(5);
+
+            var t = new Label
+            {
+                AutoSize = true,
+                Location = new Point(14, 10),
+                Text = "Nota geral",
+                Font = new Font("Segoe UI", 9F),
+                ForeColor = CorTextoSecundario
+            };
+
+            var v = new Label
+            {
+                AutoSize = true,
+                Location = new Point(14, 32),
+                Text = dadosAtual.NotaGeral > 0 ? dadosAtual.NotaGeral.ToString("N2") : "—",
+                Font = new Font("Segoe UI Semibold", 15F, FontStyle.Bold),
+                ForeColor = CorTexto
+            };
+
+            var d = new Label
+            {
+                AutoSize = true,
+                Location = new Point(14, 65),
+                Text = $"{seta} {Math.Abs(dif):N2}   (antes {dadosAnterior.NotaGeral:N2})",
+                Font = new Font("Segoe UI Semibold", 8.8F, FontStyle.Bold),
+                ForeColor = cor
+            };
+
+            card.Controls.Add(t);
+            card.Controls.Add(v);
+            card.Controls.Add(d);
+            return card;
+        }
+
+        private Control CriarLinhaMudancasTmr()
+        {
+            var grid = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
                 RowCount = 1
             };
 
-            linhaArquivo.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            linhaArquivo.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
 
-            txtArquivo = new TextBox
+            if (!comparacaoRealizada)
             {
-                Text = "Nenhum arquivo selecionado",
-                ReadOnly = true,
-                Dock = DockStyle.Fill,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font = new Font("Segoe UI", 9F)
-            };
+                grid.Controls.Add(
+                    CriarCardFrase(
+                        "⏱  TMR PIOROU",
+                        "Aguardando comparação.",
+                        CorVermelhoClaro,
+                        CorVermelho),
+                    0, 0);
 
-            Button btnArquivo = new Button
-            {
-                Text = "Selecionar",
-                Dock = DockStyle.Fill,
-                Margin = new Padding(6, 0, 0, 0),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(239, 247, 243),
-                ForeColor = CorVerdeEscuro,
-                Cursor = Cursors.Hand
-            };
+                grid.Controls.Add(
+                    CriarCardFrase(
+                        "✓  TMR MELHOROU",
+                        "Aguardando comparação.",
+                        CorVerdeClaro,
+                        CorVerde),
+                    1, 0);
 
-            btnArquivo.FlatAppearance.BorderColor = Color.FromArgb(190, 220, 205);
-            btnArquivo.Click += evento;
+                return grid;
+            }
 
-            linhaArquivo.Controls.Add(txtArquivo, 0, 0);
-            linhaArquivo.Controls.Add(btnArquivo, 1, 0);
+            var mudancas = CompararTempos(
+                dadosAnterior.TMR,
+                dadosAtual.TMR,
+                60);
 
-            lblPeriodo = new Label
-            {
-                Text = string.Empty,
-                Dock = DockStyle.Fill,
-                ForeColor = CorCinza,
-                Font = new Font("Segoe UI", 8.3F),
-                TextAlign = ContentAlignment.MiddleLeft
-            };
+            var pioraram = mudancas
+                .Where(x => x.DiferencaSegundos > 0)
+                .OrderByDescending(x => x.DiferencaSegundos)
 
-            layout.Controls.Add(lblTitulo, 0, 0);
-            layout.Controls.Add(linhaArquivo, 0, 1);
-            layout.Controls.Add(lblPeriodo, 0, 2);
-            card.Controls.Add(layout);
+                .Select(x => NomeCurto(x.Nome))
+                .ToList();
 
-            return card;
-        }
+            var melhoraram = mudancas
+                .Where(x => x.DiferencaSegundos < 0)
+                .OrderBy(x => x.DiferencaSegundos)
 
-        // =========================================================
-        // KPI
-        // =========================================================
-        private Control CriarKpis()
-        {
-            TableLayoutPanel painel = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 6,
-                RowCount = 1,
-                Padding = new Padding(0, 2, 0, 6)
-            };
+                .Select(x => NomeCurto(x.Nome))
+                .ToList();
 
-            for (int i = 0; i < 6; i++)
-                painel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16.666F));
+            string textoPiorou = pioraram.Count == 0
+                ? "Nenhuma piora relevante no TMR."
+                : $"Pioraram: {JuntarNomes(pioraram)}.";
 
-            painel.Controls.Add(CriarKpi("Conversas recebidas", out kpiConversas), 0, 0);
-            painel.Controls.Add(CriarKpi("Atendimentos finalizados", out kpiFinalizados), 1, 0);
-            painel.Controls.Add(CriarKpi("Taxa de finalização", out kpiTaxaFinalizacao), 2, 0);
-            painel.Controls.Add(CriarKpi("Reagendamentos", out kpiReagendamentos), 3, 0);
-            painel.Controls.Add(CriarKpi("Novos contatos", out kpiNovosContatos), 4, 0);
-            painel.Controls.Add(CriarKpi("Nota média", out kpiNotaMedia), 5, 0);
+            string textoMelhorou = melhoraram.Count == 0
+                ? "Nenhuma melhora relevante no TMR."
+                : $"Melhoraram: {JuntarNomes(melhoraram)}.";
 
-            return painel;
-        }
-
-        private Control CriarKpi(string titulo, out KpiView kpi)
-        {
-            RoundedPanel card = new RoundedPanel
-            {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(4),
-                Radius = 10,
-                BorderColor = CorBorda,
-                BackColor = Color.White
-            };
-
-            TableLayoutPanel layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                RowCount = 4,
-                ColumnCount = 1,
-                Padding = new Padding(13, 9, 10, 6)
-            };
-
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 25));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-            Label lblTitulo = new Label
-            {
-                Text = titulo,
-                Dock = DockStyle.Fill,
-                ForeColor = CorTexto,
-                Font = new Font("Segoe UI", 9F),
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            Label lblValor = new Label
-            {
-                Dock = DockStyle.Fill,
-                ForeColor = Color.FromArgb(17, 33, 48),
-                Font = new Font("Segoe UI Semibold", 16F, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            Label lblVariacao = new Label
-            {
-                Dock = DockStyle.Fill,
-                Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-
-            Label lblAnterior = new Label
-            {
-                Dock = DockStyle.Fill,
-                ForeColor = CorCinza,
-                Font = new Font("Segoe UI", 8F),
-                TextAlign = ContentAlignment.TopLeft
-            };
-
-            layout.Controls.Add(lblTitulo, 0, 0);
-            layout.Controls.Add(lblValor, 0, 1);
-            layout.Controls.Add(lblVariacao, 0, 2);
-            layout.Controls.Add(lblAnterior, 0, 3);
-            card.Controls.Add(layout);
-
-            kpi = new KpiView(lblValor, lblVariacao, lblAnterior);
-            return card;
-        }
-
-        // =========================================================
-        // ANÁLISES
-        // =========================================================
-        private Control CriarAnalise()
-        {
-            TableLayoutPanel area = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 4,
-                RowCount = 1,
-                Padding = new Padding(0, 3, 0, 6)
-            };
-
-            area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24F));
-            area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24F));
-            area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24F));
-            area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28F));
-
-            area.Controls.Add(
-                CriarCardAnalise("▣  Resumo Executivo", Color.FromArgb(236, 249, 242), CorVerdeEscuro, out lblResumoTexto),
+            grid.Controls.Add(
+                CriarCardFrase(
+                    "⏱  TMR PIOROU",
+                    textoPiorou,
+                    CorVermelhoClaro,
+                    CorVermelho),
                 0, 0);
 
-            area.Controls.Add(
-                CriarCardAnalise("⚠  Principais Alertas", Color.FromArgb(253, 239, 239), CorVermelho, out lblAlertasTexto),
+            grid.Controls.Add(
+                CriarCardFrase(
+                    "✓  TMR MELHOROU",
+                    textoMelhorou,
+                    CorVerdeClaro,
+                    CorVerde),
                 1, 0);
 
-            area.Controls.Add(
-                CriarCardAnalise("●  Oportunidades", Color.FromArgb(237, 250, 241), CorVerdeEscuro, out lblOportunidadesTexto),
-                2, 0);
-
-            area.Controls.Add(
-                CriarCardAnalise("◎  Ações Recomendadas", Color.FromArgb(238, 245, 253), CorAzul, out lblAcoesTexto),
-                3, 0);
-
-            return area;
+            return grid;
         }
 
-        private Control CriarCardAnalise(string titulo, Color fundo, Color corTitulo, out Label lblTexto)
+        private Control CriarLinhaMudancasTme()
         {
-            RoundedPanel card = new RoundedPanel
+            var grid = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(4),
-                Radius = 10,
-                BorderColor = CorBorda,
-                BackColor = fundo
-            };
-
-            Label lblTitulo = new Label
-            {
-                Dock = DockStyle.Top,
-                Height = 37,
-                Text = titulo,
-                Font = new Font("Segoe UI Semibold", 11F, FontStyle.Bold),
-                ForeColor = corTitulo,
-                Padding = new Padding(12, 10, 0, 0)
-            };
-
-            lblTexto = new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = string.Empty,
-                ForeColor = CorTexto,
-                Font = new Font("Segoe UI", 8.8F),
-                Padding = new Padding(13, 4, 10, 7)
-            };
-
-            card.Controls.Add(lblTexto);
-            card.Controls.Add(lblTitulo);
-            return card;
-        }
-
-        // =========================================================
-        // PARTE INFERIOR
-        // =========================================================
-        private Control CriarParteInferior()
-        {
-            TableLayoutPanel area = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 3,
+                ColumnCount = 2,
                 RowCount = 1
             };
 
-            area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34F));
-            area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 44F));
-            area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22F));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
 
-            area.Controls.Add(CriarGrafico(), 0, 0);
-            area.Controls.Add(CriarTabelaAtendentes(), 1, 0);
-            area.Controls.Add(CriarPainelDireito(), 2, 0);
-            return area;
-        }
-
-        private Control CriarGrafico()
-        {
-            RoundedPanel card = new RoundedPanel
+            if (!comparacaoRealizada)
             {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(4),
-                Radius = 10,
-                BorderColor = CorBorda,
-                BackColor = Color.White
-            };
+                grid.Controls.Add(
+                    CriarCardFrase(
+                        "⏳  TME PIOROU",
+                        "Aguardando comparação.",
+                        CorVermelhoClaro,
+                        CorVermelho),
+                    0, 0);
 
-            Label titulo = new Label
-            {
-                Text = "▥  Motivos de Atendimento",
-                Dock = DockStyle.Top,
-                Height = 35,
-                Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold),
-                ForeColor = CorTexto,
-                Padding = new Padding(12, 10, 0, 0)
-            };
+                grid.Controls.Add(
+                    CriarCardFrase(
+                        "✓  TME MELHOROU",
+                        "Aguardando comparação.",
+                        CorVerdeClaro,
+                        CorVerde),
+                    1, 0);
 
-            graficoMotivos = new ComparisonBarChart
-            {
-                Dock = DockStyle.Fill,
-                BackColor = Color.White
-            };
-
-            card.Controls.Add(graficoMotivos);
-            card.Controls.Add(titulo);
-            return card;
-        }
-
-        private Control CriarTabelaAtendentes()
-        {
-            RoundedPanel card = new RoundedPanel
-            {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(4),
-                Radius = 10,
-                BorderColor = CorBorda,
-                BackColor = Color.White
-            };
-
-            Label titulo = new Label
-            {
-                Text = "●  Desempenho por Atendente",
-                Dock = DockStyle.Top,
-                Height = 35,
-                Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold),
-                ForeColor = CorTexto,
-                Padding = new Padding(12, 10, 0, 0)
-            };
-
-            dgvAtendentes = new DataGridView
-            {
-                Dock = DockStyle.Fill,
-                BackgroundColor = Color.White,
-                BorderStyle = BorderStyle.None,
-                ReadOnly = true,
-                AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
-                AllowUserToResizeRows = false,
-                RowHeadersVisible = false,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                MultiSelect = false,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                ColumnHeadersHeight = 32,
-                EnableHeadersVisualStyles = false
-            };
-
-            dgvAtendentes.RowTemplate.Height = 28;
-            dgvAtendentes.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(239, 243, 247);
-            dgvAtendentes.ColumnHeadersDefaultCellStyle.ForeColor = CorTexto;
-            dgvAtendentes.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 8.2F, FontStyle.Bold);
-            dgvAtendentes.DefaultCellStyle.Font = new Font("Segoe UI", 8.2F);
-            dgvAtendentes.DefaultCellStyle.ForeColor = CorTexto;
-            dgvAtendentes.DefaultCellStyle.SelectionBackColor = Color.FromArgb(225, 240, 234);
-            dgvAtendentes.DefaultCellStyle.SelectionForeColor = CorTexto;
-            dgvAtendentes.GridColor = Color.FromArgb(230, 233, 237);
-
-            dgvAtendentes.Columns.Add("Nome", "Atendente");
-            dgvAtendentes.Columns.Add("Anterior", "Mês retrasado");
-            dgvAtendentes.Columns.Add("Atual", "Mês passado");
-            dgvAtendentes.Columns.Add("Variacao", "Variação");
-            dgvAtendentes.Columns.Add("Nota", "Nota");
-            dgvAtendentes.Columns.Add("TMR", "TMR");
-            dgvAtendentes.Columns.Add("Diagnostico", "Diagnóstico");
-            dgvAtendentes.CellFormatting += DgvAtendentes_CellFormatting;
-
-            card.Controls.Add(dgvAtendentes);
-            card.Controls.Add(titulo);
-            return card;
-        }
-
-        private void DgvAtendentes_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
-        {
-            if (e.ColumnIndex < 0 || dgvAtendentes.Columns[e.ColumnIndex].Name != "Variacao")
-                return;
-
-            string valor = Convert.ToString(e.Value) ?? string.Empty;
-
-            if (valor.StartsWith("▲"))
-            {
-                e.CellStyle.ForeColor = CorVerde;
-                e.CellStyle.Font = new Font("Segoe UI Semibold", 8.2F, FontStyle.Bold);
+                return grid;
             }
-            else if (valor.StartsWith("▼"))
-            {
-                e.CellStyle.ForeColor = CorVermelho;
-                e.CellStyle.Font = new Font("Segoe UI Semibold", 8.2F, FontStyle.Bold);
-            }
-            else if (valor.Contains("Novo", StringComparison.OrdinalIgnoreCase))
-            {
-                e.CellStyle.ForeColor = CorAzul;
-                e.CellStyle.Font = new Font("Segoe UI Semibold", 8.2F, FontStyle.Bold);
-            }
-        }
 
-        private Control CriarPainelDireito()
-        {
-            TableLayoutPanel area = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                RowCount = 2,
-                ColumnCount = 1
-            };
+            var mudancas = CompararTempos(
+                dadosAnterior.TME,
+                dadosAtual.TME,
+                60);
 
-            area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            area.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-            area.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            var pioraram = mudancas
+                .Where(x => x.DiferencaSegundos > 0)
+                .OrderByDescending(x => x.DiferencaSegundos)
 
-            area.Controls.Add(
-                CriarCardAnalise("★  Destaques da Equipe", Color.White, CorVerdeEscuro, out lblDestaquesTexto),
+                .Select(x => NomeCurto(x.Nome))
+                .ToList();
+
+            var melhoraram = mudancas
+                .Where(x => x.DiferencaSegundos < 0)
+                .OrderBy(x => x.DiferencaSegundos)
+
+                .Select(x => NomeCurto(x.Nome))
+                .ToList();
+
+            string textoPiorou = pioraram.Count == 0
+                ? "Nenhuma piora relevante no TME."
+                : $"Pioraram: {JuntarNomes(pioraram)}.";
+
+            string textoMelhorou = melhoraram.Count == 0
+                ? "Nenhuma melhora relevante no TME."
+                : $"Melhoraram: {JuntarNomes(melhoraram)}.";
+
+            grid.Controls.Add(
+                CriarCardFrase(
+                    "⏳  TME PIOROU",
+                    textoPiorou,
+                    CorVermelhoClaro,
+                    CorVermelho),
                 0, 0);
 
-            area.Controls.Add(
-                CriarCardAnalise("⚠  Integridade dos Dados", Color.White, CorAmarelo, out lblIntegridadeTexto),
-                0, 1);
+            grid.Controls.Add(
+                CriarCardFrase(
+                    "✓  TME MELHOROU",
+                    textoMelhorou,
+                    CorVerdeClaro,
+                    CorVerde),
+                1, 0);
 
-            return area;
+            return grid;
         }
 
-        // =========================================================
-        // RODAPÉ / LIMPAR
-        // =========================================================
-        private Control CriarRodape()
+        private Control CriarLinhaEquipe()
         {
-            Panel rodape = new Panel { Dock = DockStyle.Fill };
+            var grid = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1
+            };
+
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+
+            if (!comparacaoRealizada)
+            {
+                grid.Controls.Add(
+                    CriarCardFrase(
+                        "📞  ATENDIMENTOS",
+                        "Aguardando comparação.",
+                        CorAzulClaro,
+                        CorAzul),
+                    0, 0);
+
+                grid.Controls.Add(
+                    CriarCardFrase(
+                        "⭐  NOTAS",
+                        "Aguardando comparação.",
+                        CorAmareloClaro,
+                        CorAmarelo),
+                    1, 0);
+
+                return grid;
+            }
+
+            var atendimentos = CompararNumeros(
+                dadosAnterior.AtendentesFinalizados,
+                dadosAtual.AtendentesFinalizados);
+
+            var aumentaram = atendimentos
+                .Where(x => x.Percentual >= 5)
+                .OrderByDescending(x => x.Percentual)
+
+                .Select(x => NomeCurto(x.Nome))
+                .ToList();
+
+            var diminuiram = atendimentos
+                .Where(x => x.Percentual <= -5)
+                .OrderBy(x => x.Percentual)
+
+                .Select(x => NomeCurto(x.Nome))
+                .ToList();
+
+            string textoAtendimentos = "";
+
+            if (aumentaram.Count > 0)
+                textoAtendimentos += $"Aumentaram: {JuntarNomes(aumentaram)}.";
+
+            if (diminuiram.Count > 0)
+                textoAtendimentos +=
+                    (textoAtendimentos.Length > 0 ? "\n" : "") +
+                    $"Diminuíram: {JuntarNomes(diminuiram)}.";
+
+            if (textoAtendimentos.Length == 0)
+                textoAtendimentos = "Sem mudanças relevantes no volume de atendimentos.";
+
+            var notas = CompararNotas(
+                dadosAnterior.Notas,
+                dadosAtual.Notas);
+
+            var notasMelhoraram = notas
+                .Where(x => x.Diferenca >= 0.03)
+                .OrderByDescending(x => x.Diferenca)
+
+                .Select(x => NomeCurto(x.Nome))
+                .ToList();
+
+            var notasPioraram = notas
+                .Where(x => x.Diferenca <= -0.03)
+                .OrderBy(x => x.Diferenca)
+
+                .Select(x => NomeCurto(x.Nome))
+                .ToList();
+
+            string textoNotas = "";
+
+            if (notasMelhoraram.Count > 0)
+                textoNotas += $"Melhoraram: {JuntarNomes(notasMelhoraram)}.";
+
+            if (notasPioraram.Count > 0)
+                textoNotas +=
+                    (textoNotas.Length > 0 ? "\n" : "") +
+                    $"Pioraram: {JuntarNomes(notasPioraram)}.";
+
+            if (textoNotas.Length == 0)
+                textoNotas = "As notas ficaram estáveis.";
+
+            grid.Controls.Add(
+                CriarCardFrase(
+                    "📞  ATENDIMENTOS",
+                    textoAtendimentos,
+                    CorAzulClaro,
+                    CorAzul),
+                0, 0);
+
+            grid.Controls.Add(
+                CriarCardFrase(
+                    "⭐  NOTAS",
+                    textoNotas,
+                    CorAmareloClaro,
+                    CorAmarelo),
+                1, 0);
+
+            return grid;
+        }
+
+        private Control CriarCardFrase(
+            string titulo,
+            string texto,
+            Color fundo,
+            Color corTitulo)
+        {
+            var card = CriarCard(fundo);
+            card.Margin = new Padding(4);
+
+            var tituloLabel = new Label
+            {
+                Dock = DockStyle.Top,
+                Height = 34,
+                Text = titulo,
+                Padding = new Padding(14, 9, 8, 0),
+                Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold),
+                ForeColor = corTitulo
+            };
+
+            var areaTexto = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = false,
+                BackColor = fundo,
+                Padding = Padding.Empty
+            };
+
+            var textoLabel = new Label
+            {
+                AutoSize = true,
+                Text = texto,
+                Location = new Point(14, 8),
+                Font = new Font("Segoe UI Semibold", 10.2F),
+                ForeColor = CorTexto
+            };
+
+            void AtualizarScroll()
+            {
+                if (areaTexto.ClientSize.Width <= 0 ||
+                    areaTexto.ClientSize.Height <= 0)
+                {
+                    return;
+                }
+
+                int larguraDisponivel =
+                    Math.Max(120, areaTexto.ClientSize.Width - 28);
+
+                // Mantém o texto dentro da largura do card.
+                textoLabel.MaximumSize =
+                    new Size(larguraDisponivel, 0);
+
+                // Calcula a altura real necessária para o texto.
+                Size tamanhoNecessario =
+                    TextRenderer.MeasureText(
+                        textoLabel.Text,
+                        textoLabel.Font,
+                        new Size(larguraDisponivel, int.MaxValue),
+                        TextFormatFlags.WordBreak |
+                        TextFormatFlags.NoPadding);
+
+                int alturaNecessaria =
+                    textoLabel.Top +
+                    tamanhoNecessario.Height +
+                    8;
+
+                bool precisaScroll =
+                    alturaNecessaria > areaTexto.ClientSize.Height;
+
+                // Só ativa a barra quando o conteúdo realmente não cabe.
+                areaTexto.AutoScroll = precisaScroll;
+
+                if (precisaScroll)
+                {
+                    areaTexto.AutoScrollMinSize =
+                        new Size(0, alturaNecessaria);
+                }
+                else
+                {
+                    areaTexto.AutoScrollMinSize = Size.Empty;
+
+                    // Garante que o texto volte para a posição original
+                    // caso o usuário tenha rolado antes.
+                    areaTexto.AutoScrollPosition = Point.Empty;
+                }
+            }
+
+            areaTexto.Controls.Add(textoLabel);
+            card.Controls.Add(areaTexto);
+            card.Controls.Add(tituloLabel);
+
+            areaTexto.Resize += (_, _) => AtualizarScroll();
+            textoLabel.TextChanged += (_, _) => AtualizarScroll();
+
+            // Executa também depois que o layout terminar.
+            card.HandleCreated += (_, _) =>
+            {
+                card.BeginInvoke(new Action(AtualizarScroll));
+            };
+
+            return card;
+        }
+
+        private Control CriarResumoSimples()
+        {
+            var card = CriarCard(Color.White);
+            card.Margin = new Padding(4);
+
+            var titulo = new Label
+            {
+                Dock = DockStyle.Top,
+                Height = 38,
+                Text = "📌  RESUMO DO MÊS",
+                Padding = new Padding(14, 11, 0, 0),
+                Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
+                ForeColor = CorSidebar
+            };
+
+            string texto = comparacaoRealizada
+                ? GerarResumoCurto()
+                : "Importe os dois arquivos e clique em COMPARAR.\n" +
+                  "Aqui aparecerá um resumo simples das principais mudanças do mês.";
+
+            var areaResumo = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = false,
+                BackColor = Color.White,
+                Padding = Padding.Empty
+            };
+
+            var resumo = new Label
+            {
+                AutoSize = true,
+                Text = texto,
+                Location = new Point(15, 9),
+                Font = new Font("Segoe UI", 9.7F),
+                ForeColor = CorTexto
+            };
+
+            void AtualizarScrollResumo()
+            {
+                if (areaResumo.ClientSize.Width <= 0 ||
+                    areaResumo.ClientSize.Height <= 0)
+                {
+                    return;
+                }
+
+                int larguraDisponivel =
+                    Math.Max(200, areaResumo.ClientSize.Width - 32);
+
+                resumo.MaximumSize =
+                    new Size(larguraDisponivel, 0);
+
+                Size tamanhoNecessario =
+                    TextRenderer.MeasureText(
+                        resumo.Text,
+                        resumo.Font,
+                        new Size(larguraDisponivel, int.MaxValue),
+                        TextFormatFlags.WordBreak |
+                        TextFormatFlags.NoPadding);
+
+                int alturaNecessaria =
+                    resumo.Top +
+                    tamanhoNecessario.Height +
+                    10;
+
+                bool precisaScroll =
+                    alturaNecessaria > areaResumo.ClientSize.Height;
+
+                areaResumo.AutoScroll = precisaScroll;
+
+                if (precisaScroll)
+                {
+                    areaResumo.AutoScrollMinSize =
+                        new Size(0, alturaNecessaria);
+                }
+                else
+                {
+                    areaResumo.AutoScrollMinSize = Size.Empty;
+                    areaResumo.AutoScrollPosition = Point.Empty;
+                }
+            }
+
+            areaResumo.Controls.Add(resumo);
+            card.Controls.Add(areaResumo);
+            card.Controls.Add(titulo);
+
+            areaResumo.Resize += (_, _) => AtualizarScrollResumo();
+            resumo.TextChanged += (_, _) => AtualizarScrollResumo();
+
+            card.HandleCreated += (_, _) =>
+            {
+                card.BeginInvoke(new Action(AtualizarScrollResumo));
+            };
+
+            return card;
+        }
+
+        private Control CriarBarraInferior()
+        {
+            var p = new Panel { Dock = DockStyle.Fill };
 
             lblStatus = new Label
             {
                 AutoSize = true,
-                ForeColor = CorVerdeEscuro,
-                Location = new Point(5, 18)
+                Location = new Point(5, 19),
+                Text = comparacaoRealizada
+                    ? $"● Comparação concluída: {dadosAnterior.Periodo} x {dadosAtual.Periodo}"
+                    : "● Selecione os dois arquivos e clique em comparar.",
+                ForeColor = CorSidebar,
+                Font = new Font("Segoe UI", 8.3F)
             };
 
-            FlowLayoutPanel botoes = new FlowLayoutPanel
+            var botoes = new FlowLayoutPanel
             {
                 Dock = DockStyle.Right,
-                Width = 530,
+                Width = 275,
                 FlowDirection = FlowDirection.RightToLeft,
-                Padding = new Padding(0, 7, 0, 0)
+                Padding = new Padding(0, 6, 0, 0)
             };
 
-            Button btnFechar = CriarBotaoRodape("Fechar", Color.White, CorTexto);
-            Button btnExcel = CriarBotaoRodape("Exportar Excel", Color.White, CorVerdeEscuro);
-            Button btnPdf = CriarBotaoRodape("Exportar PDF", CorVerde, Color.White);
-            Button btnLimpar = CriarBotaoRodape("Limpar dados", Color.White, CorVermelho);
+            var btnLimpar = CriarBotaoAcao("Limpar dados", Color.White, CorVermelho, 125);
+            btnLimpar.Click += (_, _) => LimparDados();
 
-            btnFechar.Click += (s, e) => Close();
-            btnLimpar.Click += (s, e) => LimparDados();
+            var btnDetalhes = CriarBotaoAcao("Ver atendentes", CorSidebar, Color.White, 130);
+            btnDetalhes.Click += (_, _) => MostrarPagina("Atendentes");
 
-            btnExcel.Click += (s, e) => MessageBox.Show(
-                "A exportação será ligada depois que finalizarmos a leitura e o relatório.",
-                "Exportar Excel",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-
-            btnPdf.Click += (s, e) => MessageBox.Show(
-                "A exportação será ligada depois que finalizarmos a leitura e o relatório.",
-                "Exportar PDF",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-
-            botoes.Controls.Add(btnFechar);
-            botoes.Controls.Add(btnExcel);
-            botoes.Controls.Add(btnPdf);
+            botoes.Controls.Add(btnDetalhes);
             botoes.Controls.Add(btnLimpar);
 
-            rodape.Controls.Add(lblStatus);
-            rodape.Controls.Add(botoes);
-            return rodape;
+            p.Controls.Add(lblStatus);
+            p.Controls.Add(botoes);
+            return p;
         }
 
-        private Button CriarBotaoRodape(string textoBotao, Color fundo, Color corTexto)
+        // ============================================================
+        // PÁGINA ATENDENTES
+        // ============================================================
+        private Control CriarPaginaAtendentes()
         {
-            Button btn = new Button
+            var pagina = CriarPaginaDetalhe("Atendentes", "Aqui ficam os números detalhados. A tela principal continua simples.");
+
+            if (!comparacaoRealizada)
             {
-                Text = textoBotao,
-                Width = 120,
-                Height = 38,
-                Margin = new Padding(5),
-                BackColor = fundo,
-                ForeColor = corTexto,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI Semibold", 9F),
-                Cursor = Cursors.Hand
+                pagina.Controls.Add(CriarMensagemVazia());
+                return pagina;
+            }
+
+            var grid = CriarDataGrid();
+            grid.Columns.Add("Nome", "Atendente");
+            grid.Columns.Add("Ant", dadosAnterior.Periodo);
+            grid.Columns.Add("Atual", dadosAtual.Periodo);
+            grid.Columns.Add("Var", "Variação");
+            grid.Columns.Add("TmrAnt", "TMR anterior");
+            grid.Columns.Add("TmrAtual", "TMR atual");
+            grid.Columns.Add("TmeAnt", "TME anterior");
+            grid.Columns.Add("TmeAtual", "TME atual");
+            grid.Columns.Add("NotaAnt", "Nota anterior");
+            grid.Columns.Add("NotaAtual", "Nota atual");
+            grid.Columns.Add("Leitura", "Leitura rápida");
+
+            var nomes = dadosAnterior.AtendentesFinalizados.Keys
+                .Union(dadosAtual.AtendentesFinalizados.Keys)
+                .OrderBy(x => NomeCurto(x))
+                .ToList();
+
+            foreach (var chave in nomes)
+            {
+                double ant = Valor(dadosAnterior.AtendentesFinalizados, chave);
+                double atual = Valor(dadosAtual.AtendentesFinalizados, chave);
+                double pct = CalcularPercentual(ant, atual);
+
+                TimeSpan? tmrAnt = Tempo(dadosAnterior.TMR, chave);
+                TimeSpan? tmrAt = Tempo(dadosAtual.TMR, chave);
+                TimeSpan? tmeAnt = Tempo(dadosAnterior.TME, chave);
+                TimeSpan? tmeAt = Tempo(dadosAtual.TME, chave);
+
+                double notaAnt = Valor(dadosAnterior.Notas, chave);
+                double notaAt = Valor(dadosAtual.Notas, chave);
+
+                string leitura = GerarLeituraAtendente(
+                    ant,
+                    atual,
+                    tmrAnt,
+                    tmrAt,
+                    tmeAnt,
+                    tmeAt,
+                    notaAnt,
+                    notaAt);
+
+                int r = grid.Rows.Add(
+                    NomeExibicao(chave),
+                    ant.ToString("N0"),
+                    atual.ToString("N0"),
+                    FormatarPercentualComSeta(pct),
+                    FormatarTempo(tmrAnt),
+                    FormatarTempo(tmrAt),
+                    FormatarTempo(tmeAnt),
+                    FormatarTempo(tmeAt),
+                    notaAnt > 0 ? notaAnt.ToString("N2") : "—",
+                    notaAt > 0 ? notaAt.ToString("N2") : "—",
+                    leitura);
+
+                var linha = grid.Rows[r];
+                linha.Cells["Var"].Style.ForeColor = pct >= 0 ? CorVerde : CorVermelho;
+            }
+
+            // =====================================================
+            // TABELA SEM SCROLL HORIZONTAL
+            // =====================================================
+            // Todas as colunas se ajustam à largura disponível.
+            // A coluna "Leitura rápida" recebe mais espaço e quebra
+            // o texto em mais de uma linha quando necessário.
+            grid.ScrollBars = ScrollBars.Vertical;
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
+            grid.RowTemplate.MinimumHeight = 28;
+
+            grid.DefaultCellStyle.WrapMode = DataGridViewTriState.False;
+
+            grid.Columns["Nome"].FillWeight = 150;
+            grid.Columns["Ant"].FillWeight = 72;
+            grid.Columns["Atual"].FillWeight = 72;
+            grid.Columns["Var"].FillWeight = 70;
+
+            grid.Columns["TmrAnt"].FillWeight = 83;
+            grid.Columns["TmrAtual"].FillWeight = 83;
+
+            grid.Columns["TmeAnt"].FillWeight = 83;
+            grid.Columns["TmeAtual"].FillWeight = 83;
+
+            grid.Columns["NotaAnt"].FillWeight = 68;
+            grid.Columns["NotaAtual"].FillWeight = 68;
+
+            // Maior espaço para o texto explicativo.
+            grid.Columns["Leitura"].FillWeight = 200;
+            grid.Columns["Leitura"].MinimumWidth = 180;
+            grid.Columns["Leitura"].DefaultCellStyle.WrapMode =
+                DataGridViewTriState.True;
+
+            grid.Columns["Nome"].MinimumWidth = 130;
+            grid.Columns["Ant"].MinimumWidth = 65;
+            grid.Columns["Atual"].MinimumWidth = 65;
+            grid.Columns["Var"].MinimumWidth = 65;
+
+            grid.Columns["TmrAnt"].MinimumWidth = 72;
+            grid.Columns["TmrAtual"].MinimumWidth = 72;
+            grid.Columns["TmeAnt"].MinimumWidth = 72;
+            grid.Columns["TmeAtual"].MinimumWidth = 72;
+
+            grid.Columns["NotaAnt"].MinimumWidth = 62;
+            grid.Columns["NotaAtual"].MinimumWidth = 62;
+
+            pagina.Controls.Add(grid);
+            return pagina;
+        }
+
+        // ============================================================
+        // PÁGINA MOTIVOS
+        // ============================================================
+        private Control CriarPaginaMotivos()
+        {
+            var pagina = CriarPaginaDetalhe("Motivos de atendimento", "Compare cada motivo sem misturar com a tela principal.");
+
+            if (!comparacaoRealizada)
+            {
+                pagina.Controls.Add(CriarMensagemVazia());
+                return pagina;
+            }
+
+            var grid = CriarDataGrid();
+            grid.Columns.Add("Motivo", "Motivo");
+            grid.Columns.Add("Ant", dadosAnterior.Periodo);
+            grid.Columns.Add("Atual", dadosAtual.Periodo);
+            grid.Columns.Add("Dif", "Diferença");
+            grid.Columns.Add("Var", "Variação");
+            grid.Columns.Add("Leitura", "Leitura rápida");
+
+            var motivos = dadosAnterior.Motivos.Keys
+                .Union(dadosAtual.Motivos.Keys)
+                .OrderByDescending(x => Math.Max(Valor(dadosAnterior.Motivos, x), Valor(dadosAtual.Motivos, x)))
+                .ToList();
+
+            foreach (var motivo in motivos)
+            {
+                double ant = Valor(dadosAnterior.Motivos, motivo);
+                double atual = Valor(dadosAtual.Motivos, motivo);
+                double dif = atual - ant;
+                double pct = CalcularPercentual(ant, atual);
+
+                int r = grid.Rows.Add(
+                    motivo,
+                    ant.ToString("N0"),
+                    atual.ToString("N0"),
+                    $"{dif:+0;-0;0}",
+                    FormatarPercentualComSeta(pct),
+                    dif > 0 ? "Aumentou" : dif < 0 ? "Reduziu" : "Estável");
+
+                grid.Rows[r].Cells["Var"].Style.ForeColor =
+                    dif > 0 ? CorAzul : dif < 0 ? CorVerde : CorTextoSecundario;
+            }
+
+            grid.Columns["Motivo"].FillWeight = 190;
+            grid.Columns["Leitura"].FillWeight = 120;
+
+            pagina.Controls.Add(grid);
+            return pagina;
+        }
+
+        // ============================================================
+        // PÁGINA MARKETING
+        // ============================================================
+        private Control CriarPaginaMarketing()
+        {
+            var pagina = CriarPaginaDetalhe("Marketing", "Veja quais criativos geraram mais contatos e como mudou de um mês para o outro.");
+
+            if (!comparacaoRealizada)
+            {
+                pagina.Controls.Add(CriarMensagemVazia());
+                return pagina;
+            }
+
+            var area = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = CorFundo
+            };
+            area.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            area.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+            area.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            var topo = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                Padding = new Padding(0, 2, 0, 4)
             };
 
-            btn.FlatAppearance.BorderColor = CorBorda;
-            return btn;
+            topo.Controls.Add(CriarMiniCard(
+                "Contatos de marketing",
+                $"{dadosAnterior.MarketingTotal:N0} → {dadosAtual.MarketingTotal:N0}",
+                CalcularPercentual(dadosAnterior.MarketingTotal, dadosAtual.MarketingTotal)));
+
+            topo.Controls.Add(CriarMiniCard(
+                "Novos contatos",
+                $"{dadosAnterior.NovosContatos:N0} → {dadosAtual.NovosContatos:N0}",
+                CalcularPercentual(dadosAnterior.NovosContatos, dadosAtual.NovosContatos)));
+
+            topo.Controls.Add(CriarMiniCard(
+                "Reagendamentos",
+                $"{dadosAnterior.Reagendamentos:N0} → {dadosAtual.Reagendamentos:N0}",
+                CalcularPercentual(dadosAnterior.Reagendamentos, dadosAtual.Reagendamentos)));
+
+            var grid = CriarDataGrid();
+            grid.Columns.Add("Campanha", "Criativo / campanha");
+            grid.Columns.Add("Ant", dadosAnterior.Periodo);
+            grid.Columns.Add("Atual", dadosAtual.Periodo);
+            grid.Columns.Add("Var", "Variação");
+
+            var campanhas = dadosAnterior.MarketingCriativos.Keys
+                .Union(dadosAtual.MarketingCriativos.Keys)
+                .OrderByDescending(x => Math.Max(
+                    Valor(dadosAnterior.MarketingCriativos, x),
+                    Valor(dadosAtual.MarketingCriativos, x)))
+                .ToList();
+
+            foreach (var c in campanhas)
+            {
+                double ant = Valor(dadosAnterior.MarketingCriativos, c);
+                double atual = Valor(dadosAtual.MarketingCriativos, c);
+                double pct = CalcularPercentual(ant, atual);
+
+                int r = grid.Rows.Add(
+                    c,
+                    ant.ToString("N0"),
+                    atual.ToString("N0"),
+                    FormatarPercentualComSeta(pct));
+
+                grid.Rows[r].Cells["Var"].Style.ForeColor =
+                    pct >= 0 ? CorVerde : CorVermelho;
+            }
+
+            grid.Columns["Campanha"].FillWeight = 250;
+
+            area.Controls.Add(topo, 0, 0);
+            area.Controls.Add(grid, 0, 1);
+            pagina.Controls.Add(area);
+
+            return pagina;
         }
 
-
-        // =========================================================
-        // NAVEGAÇÃO ENTRE AS ABAS DO MENU
-        // =========================================================
-        private void MostrarPagina(AppPage pagina)
+        // ============================================================
+        // PÁGINA QUALIDADE
+        // ============================================================
+        private Control CriarPaginaQualidade()
         {
-            paginaAtual = pagina;
-            AtualizarMenuAtivo();
+            var pagina = CriarPaginaDetalhe("Qualidade dos dados", "Mostra apenas problemas que podem atrapalhar a comparação.");
 
-            if (painelPaginas == null)
-                return;
-
-            painelPaginas.SuspendLayout();
-            painelPaginas.Controls.Clear();
-
-            Control conteudo = pagina switch
+            if (!comparacaoRealizada)
             {
-                AppPage.Comparativo => CriarConteudoPrincipal(),
-                AppPage.Resumo => CriarPaginaResumoDetalhado(),
-                AppPage.Atendentes => CriarPaginaAtendentesDetalhado(),
-                AppPage.Motivos => CriarPaginaMotivosDetalhado(),
-                AppPage.Marketing => CriarPaginaMarketingDetalhado(),
-                AppPage.Qualidade => CriarPaginaQualidadeDetalhado(),
-                AppPage.Exportar => CriarPaginaExportarDetalhado(),
-                _ => CriarConteudoPrincipal()
+                pagina.Controls.Add(CriarMensagemVazia());
+                return pagina;
+            }
+
+            var lista = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                AutoScroll = true,
+                Padding = new Padding(0, 10, 0, 0)
             };
 
-            conteudo.Dock = DockStyle.Fill;
-            painelPaginas.Controls.Add(conteudo);
-            painelPaginas.ResumeLayout(true);
+            var alertas = GerarAlertasQualidade();
 
-            if (pagina == AppPage.Comparativo)
-                AtualizarPaginaComparativo();
-        }
-
-        private void AtualizarMenuAtivo()
-        {
-            foreach (KeyValuePair<AppPage, Button> item in botoesMenu)
+            if (alertas.Count == 0)
             {
-                bool ativo = item.Key == paginaAtual;
-
-                item.Value.BackColor = ativo ? CorSidebarHover : CorSidebar;
-                item.Value.Font = new Font(
-                    "Segoe UI",
-                    10F,
-                    ativo ? FontStyle.Bold : FontStyle.Regular);
-            }
-        }
-
-        private void AtualizarPaginaComparativo()
-        {
-            if (txtMesRetrasado != null)
-            {
-                txtMesRetrasado.Text = string.IsNullOrWhiteSpace(caminhoMesRetrasado)
-                    ? "Nenhum arquivo selecionado"
-                    : Path.GetFileName(caminhoMesRetrasado);
-            }
-
-            if (txtMesPassado != null)
-            {
-                txtMesPassado.Text = string.IsNullOrWhiteSpace(caminhoMesPassado)
-                    ? "Nenhum arquivo selecionado"
-                    : Path.GetFileName(caminhoMesPassado);
-            }
-
-            if (relatorioAnteriorAtual != null && relatorioAtualAtual != null)
-            {
-                PreencherDashboard(relatorioAnteriorAtual, relatorioAtualAtual);
-
-                lblPeriodo1.Text = relatorioAnteriorAtual.Periodo;
-                lblPeriodo2.Text = relatorioAtualAtual.Periodo;
-
-                lblStatus.Text =
-                    $"●  Comparação concluída: {relatorioAnteriorAtual.Periodo} x {relatorioAtualAtual.Periodo}.";
+                lista.Controls.Add(CriarAlertaLinha("✓", "Nenhuma inconsistência importante encontrada.", CorVerdeClaro, CorVerde));
             }
             else
             {
-                LimparResultados();
-
-                if (lblPeriodo1 != null)
-                    lblPeriodo1.Text = string.Empty;
-
-                if (lblPeriodo2 != null)
-                    lblPeriodo2.Text = string.Empty;
-
-                AtualizarStatusArquivos();
+                foreach (var a in alertas)
+                    lista.Controls.Add(CriarAlertaLinha("⚠", a, CorAmareloClaro, CorAmarelo));
             }
+
+            pagina.Controls.Add(lista);
+            return pagina;
         }
 
-        // =========================================================
-        // BASE DAS TELAS DETALHADAS
-        // =========================================================
-        private Panel CriarPaginaDetalheBase(
-            string titulo,
-            string subtitulo,
-            int alturaConteudo,
-            out TableLayoutPanel corpo)
+        // ============================================================
+        // PÁGINA EXPORTAR
+        // ============================================================
+        private Control CriarPaginaExportar()
         {
-            Panel scroll = new Panel
+            var pagina = CriarPaginaDetalhe(
+                "Exportar",
+                "Escolha qual tela deseja salvar em PDF. A aparência do relatório será mantida.");
+
+            var area = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorFundo,
+                Padding = new Padding(18, 20, 18, 18)
+            };
+
+            var card = new Panel
+            {
+                Width = 620,
+                Height = 285,
+                BackColor = Color.White,
+                Location = new Point(18, 18),
+                Padding = new Padding(22)
+            };
+
+            var lblStatusExportacao = new Label
+            {
+                AutoSize = true,
+                Location = new Point(22, 20),
+                Text = comparacaoRealizada
+                    ? $"Comparação pronta: {dadosAnterior.Periodo} x {dadosAtual.Periodo}"
+                    : "Primeiro importe os dois arquivos e clique em COMPARAR.",
+                Font = new Font("Segoe UI Semibold", 10.5F),
+                ForeColor = CorTexto
+            };
+
+            var lblEscolha = new Label
+            {
+                AutoSize = true,
+                Location = new Point(22, 65),
+                Text = "Qual tela deseja exportar?",
+                Font = new Font("Segoe UI Semibold", 9.5F),
+                ForeColor = CorTexto
+            };
+
+            var cboTela = new ComboBox
+            {
+                Location = new Point(22, 90),
+                Width = 360,
+                Height = 32,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Font = new Font("Segoe UI", 9.5F),
+                BackColor = Color.White
+            };
+
+            cboTela.Items.AddRange(new object[]
+            {
+                "Comparativo",
+                "Atendentes",
+                "Motivos",
+                "Marketing",
+                "Todos"
+            });
+
+            cboTela.SelectedIndex = 0;
+
+            var lblAjuda = new Label
+            {
+                Location = new Point(22, 132),
+                Width = 555,
+                Height = 42,
+                Text = "Ao escolher “Todos”, será criado um único PDF com uma página para cada tela: " +
+                       "Comparativo, Atendentes, Motivos e Marketing.",
+                Font = new Font("Segoe UI", 8.7F),
+                ForeColor = CorTextoSecundario
+            };
+
+            var btnPdf = CriarBotaoAcao(
+                "Exportar PDF",
+                CorVerde,
+                Color.White,
+                180);
+
+            btnPdf.Location = new Point(22, 195);
+            btnPdf.Height = 44;
+            btnPdf.Enabled = comparacaoRealizada;
+            btnPdf.Anchor = AnchorStyles.Left | AnchorStyles.Top;
+
+            btnPdf.Click += (_, _) =>
+            {
+                string opcao =
+                    cboTela.SelectedItem?.ToString()
+                    ?? "Comparativo";
+
+                ExportarTelasParaPdf(opcao);
+            };
+
+            var btnLimpar = CriarBotaoAcao(
+                "Limpar dados",
+                Color.White,
+                CorVermelho,
+                145);
+
+            btnLimpar.Location = new Point(214, 197);
+            btnLimpar.Height = 40;
+            btnLimpar.Anchor = AnchorStyles.Left | AnchorStyles.Top;
+            btnLimpar.Click += (_, _) => LimparDados();
+
+            card.Controls.Add(lblStatusExportacao);
+            card.Controls.Add(lblEscolha);
+            card.Controls.Add(cboTela);
+            card.Controls.Add(lblAjuda);
+            card.Controls.Add(btnPdf);
+            card.Controls.Add(btnLimpar);
+
+            area.Controls.Add(card);
+            pagina.Controls.Add(area);
+
+            return pagina;
+        }
+
+        // ============================================================
+        // COMPONENTES AUXILIARES DE TELA
+        // ============================================================
+        private Panel CriarPaginaDetalhe(string titulo, string subtitulo)
+        {
+            var p = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorFundo,
+                // O conteúdo que for adicionado com Dock=Fill começa abaixo do cabeçalho.
+                Padding = new Padding(4, 70, 4, 4)
+            };
+
+            var cab = new Panel
+            {
+                Location = new Point(4, 4),
+                Height = 62,
+                Width = Math.Max(300, p.ClientSize.Width - 8),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                BackColor = CorFundo
+            };
+
+            var t = new Label
+            {
+                AutoSize = true,
+                Location = new Point(5, 5),
+                Text = titulo,
+                Font = new Font("Segoe UI Semibold", 16F, FontStyle.Bold),
+                ForeColor = CorTexto
+            };
+
+            var s = new Label
+            {
+                AutoSize = true,
+                Location = new Point(7, 37),
+                Text = subtitulo,
+                Font = new Font("Segoe UI", 9F),
+                ForeColor = CorTextoSecundario
+            };
+
+            cab.Controls.Add(t);
+            cab.Controls.Add(s);
+            p.Controls.Add(cab);
+            return p;
+        }
+
+        private Control CriarMensagemVazia()
+        {
+            return new Label
+            {
+                Dock = DockStyle.Fill,
+                Text = "Nenhuma comparação realizada.\n\nSelecione os dois arquivos acima e clique em COMPARAR.",
+                Font = new Font("Segoe UI", 12F),
+                ForeColor = CorTextoSecundario,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+        }
+
+        private Panel CriarScroll()
+        {
+            return new Panel
             {
                 Dock = DockStyle.Fill,
                 AutoScroll = true,
                 BackColor = CorFundo
             };
-
-            TableLayoutPanel corpoLocal = new TableLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                Width = 1000,
-                Height = alturaConteudo,
-                ColumnCount = 1,
-                RowCount = 1,
-                Padding = new Padding(20, 12, 20, 15),
-                BackColor = CorFundo
-            };
-
-            corpoLocal.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            corpoLocal.RowStyles.Add(new RowStyle(SizeType.Absolute, 78F));
-
-            corpoLocal.Controls.Add(CriarCabecalhoDetalhe(titulo, subtitulo), 0, 0);
-
-            scroll.Controls.Add(corpoLocal);
-
-            // Não capturamos o parâmetro OUT dentro da lambda.
-            // Isso evita o erro CS1628.
-            scroll.Resize += (s, e) =>
-            {
-                corpoLocal.Width = Math.Max(950, scroll.ClientSize.Width - 28);
-            };
-
-            corpo = corpoLocal;
-
-            return scroll;
         }
 
-        private Control CriarCabecalhoDetalhe(string titulo, string subtitulo)
+        private Panel CriarCard(Color fundo)
         {
-            Panel panel = new Panel
-            {
-                Dock = DockStyle.Fill
-            };
-
-            Label lblTitulo = new Label
-            {
-                AutoSize = true,
-                Text = titulo,
-                Font = new Font("Segoe UI Semibold", 19F, FontStyle.Bold),
-                ForeColor = CorTexto,
-                Location = new Point(8, 4)
-            };
-
-            Label lblSubtitulo = new Label
-            {
-                AutoSize = true,
-                Text = subtitulo,
-                Font = new Font("Segoe UI", 9.5F),
-                ForeColor = CorCinza,
-                Location = new Point(10, 43)
-            };
-
-            Label periodo = new Label
-            {
-                Width = 240,
-                Height = 42,
-                TextAlign = ContentAlignment.TopRight,
-                ForeColor = CorCinza,
-                Font = new Font("Segoe UI", 8F),
-                Text = relatorioAnteriorAtual != null && relatorioAtualAtual != null
-                    ? $"{relatorioAnteriorAtual.Periodo}  ×  {relatorioAtualAtual.Periodo}"
-                    : "Aguardando comparação"
-            };
-
-            panel.Controls.Add(lblTitulo);
-            panel.Controls.Add(lblSubtitulo);
-            panel.Controls.Add(periodo);
-
-            panel.Resize += (s, e) =>
-            {
-                periodo.Location = new Point(
-                    Math.Max(0, panel.ClientSize.Width - periodo.Width - 8),
-                    8);
-            };
-
-            return panel;
-        }
-
-        private Control CriarAvisoSemComparacao()
-        {
-            RoundedPanel card = new RoundedPanel
+            return new Panel
             {
                 Dock = DockStyle.Fill,
-                Margin = new Padding(4),
-                BackColor = Color.White,
-                BorderColor = CorBorda,
-                Radius = 10
-            };
-
-            card.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                Text =
-                    "Nenhuma comparação disponível.\n\n" +
-                    "Clique em Comparativo, selecione os dois arquivos Excel e depois clique em Comparar.",
-                ForeColor = CorCinza,
-                Font = new Font("Segoe UI", 10F),
-                TextAlign = ContentAlignment.MiddleCenter
-            });
-
-            return card;
-        }
-
-        private RoundedPanel CriarCardDetalhe()
-        {
-            return new RoundedPanel
-            {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(4),
-                BackColor = Color.White,
-                BorderColor = CorBorda,
-                Radius = 10
+                BackColor = fundo,
+                BorderStyle = BorderStyle.None
             };
         }
 
-        private Control CriarCardTextoDetalhe(
-            string titulo,
-            string texto,
-            Color corTitulo,
-            Color? fundo = null)
+        private Button CriarBotaoAcao(string texto, Color fundo, Color corTexto, int largura)
         {
-            RoundedPanel card = CriarCardDetalhe();
-
-            if (fundo.HasValue)
-                card.BackColor = fundo.Value;
-
-            Label lblTitulo = new Label
+            var b = new Button
             {
-                Dock = DockStyle.Top,
-                Height = 40,
-                Text = titulo,
-                Padding = new Padding(13, 11, 0, 0),
-                ForeColor = corTitulo,
-                Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold)
-            };
-
-            Label lblTexto = new Label
-            {
-                Dock = DockStyle.Fill,
+                Width = largura,
+                Height = 38,
                 Text = texto,
-                Padding = new Padding(13, 6, 13, 10),
-                ForeColor = CorTexto,
-                Font = new Font("Segoe UI", 9F),
-                AutoEllipsis = true
+                BackColor = fundo,
+                ForeColor = corTexto,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI Semibold", 9F),
+                Cursor = Cursors.Hand,
+                Margin = new Padding(5)
             };
-
-            card.Controls.Add(lblTexto);
-            card.Controls.Add(lblTitulo);
-
-            return card;
+            b.FlatAppearance.BorderColor = CorBorda;
+            return b;
         }
 
-        private DataGridView CriarGridDetalhe()
+        private Control CriarMiniCard(string titulo, string valor, double percentual)
         {
-            DataGridView grid = new DataGridView
+            var p = CriarCard(Color.White);
+            p.Dock = DockStyle.None;
+            p.Width = 240;
+            p.Height = 88;
+            p.Margin = new Padding(4, 3, 4, 3);
+
+            var t = new Label
+            {
+                AutoSize = true,
+                Location = new Point(12, 10),
+                Text = titulo,
+                Font = new Font("Segoe UI", 8.8F),
+                ForeColor = CorTextoSecundario
+            };
+            var v = new Label
+            {
+                AutoSize = true,
+                Location = new Point(12, 33),
+                Text = valor,
+                Font = new Font("Segoe UI Semibold", 13F, FontStyle.Bold),
+                ForeColor = CorTexto
+            };
+            var d = new Label
+            {
+                AutoSize = true,
+                Location = new Point(12, 62),
+                Text = FormatarPercentualComSeta(percentual),
+                Font = new Font("Segoe UI Semibold", 8.5F),
+                ForeColor = percentual >= 0 ? CorVerde : CorVermelho
+            };
+
+            p.Controls.Add(t);
+            p.Controls.Add(v);
+            p.Controls.Add(d);
+            return p;
+        }
+
+        private Control CriarAlertaLinha(string icone, string texto, Color fundo, Color cor)
+        {
+            var p = new Panel
+            {
+                Width = 900,
+                Height = 56,
+                BackColor = fundo,
+                BorderStyle = BorderStyle.None,
+                Margin = new Padding(4)
+            };
+
+            var l = new Label
             {
                 Dock = DockStyle.Fill,
+                Text = $"{icone}  {texto}",
+                Padding = new Padding(14, 16, 10, 0),
+                Font = new Font("Segoe UI Semibold", 9.5F),
+                ForeColor = cor
+            };
+            p.Controls.Add(l);
+            return p;
+        }
+
+        private DataGridView CriarDataGrid()
+        {
+            var g = new DataGridView
+            {
+                Dock = DockStyle.Fill,
+                BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle,
                 ReadOnly = true,
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
                 AllowUserToResizeRows = false,
                 RowHeadersVisible = false,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 MultiSelect = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                BackgroundColor = Color.White,
-                BorderStyle = BorderStyle.None,
                 EnableHeadersVisualStyles = false,
-                GridColor = Color.FromArgb(230, 233, 237),
                 ColumnHeadersHeight = 34
             };
 
-            grid.RowTemplate.Height = 29;
-
-            grid.ColumnHeadersDefaultCellStyle.BackColor =
-                Color.FromArgb(239, 243, 247);
-
-            grid.ColumnHeadersDefaultCellStyle.ForeColor = CorTexto;
-
-            grid.ColumnHeadersDefaultCellStyle.Font =
-                new Font("Segoe UI Semibold", 8.3F, FontStyle.Bold);
-
-            grid.DefaultCellStyle.ForeColor = CorTexto;
-            grid.DefaultCellStyle.Font = new Font("Segoe UI", 8.3F);
-
-            grid.DefaultCellStyle.SelectionBackColor =
-                Color.FromArgb(225, 240, 234);
-
-            grid.DefaultCellStyle.SelectionForeColor = CorTexto;
-
-            return grid;
+            g.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(233, 238, 243);
+            g.ColumnHeadersDefaultCellStyle.ForeColor = CorTexto;
+            g.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold);
+            g.DefaultCellStyle.Font = new Font("Segoe UI", 8.5F);
+            g.DefaultCellStyle.ForeColor = CorTexto;
+            g.DefaultCellStyle.SelectionBackColor = Color.FromArgb(226, 241, 235);
+            g.DefaultCellStyle.SelectionForeColor = CorTexto;
+            g.GridColor = CorBorda;
+            g.RowTemplate.Height = 29;
+            return g;
         }
 
-        private Control CriarCardComGrid(string titulo, DataGridView grid)
+        // ============================================================
+        // IMPORTAÇÃO / COMPARAÇÃO
+        // ============================================================
+        private void SelecionarAnterior(object sender, EventArgs e)
         {
-            RoundedPanel card = CriarCardDetalhe();
-
-            Label lblTitulo = new Label
+            using var ofd = new OpenFileDialog
             {
-                Dock = DockStyle.Top,
-                Height = 40,
-                Text = titulo,
-                Padding = new Padding(13, 11, 0, 0),
-                ForeColor = CorTexto,
-                Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold)
-            };
-
-            card.Controls.Add(grid);
-            card.Controls.Add(lblTitulo);
-            return card;
-        }
-
-        // =========================================================
-        // RESUMO EXECUTIVO DETALHADO
-        // =========================================================
-        private Control CriarPaginaResumoDetalhado()
-        {
-            Panel pagina = CriarPaginaDetalheBase(
-                "Resumo Executivo",
-                "Uma leitura mais completa do que mudou e do que merece atenção.",
-                760,
-                out TableLayoutPanel corpo);
-
-            corpo.RowCount = 4;
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 125F));
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 255F));
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 285F));
-
-            if (relatorioAnteriorAtual == null || relatorioAtualAtual == null)
-            {
-                corpo.Controls.Add(CriarAvisoSemComparacao(), 0, 1);
-                return pagina;
-            }
-
-            RelatorioMensal anterior = relatorioAnteriorAtual;
-            RelatorioMensal atual = relatorioAtualAtual;
-
-            double taxaAnterior = CalcularTaxa(anterior.Finalizados, anterior.Conversas);
-            double taxaAtual = CalcularTaxa(atual.Finalizados, atual.Conversas);
-
-            TableLayoutPanel indicadores = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 4,
-                RowCount = 1,
-                Padding = new Padding(0, 2, 0, 4)
-            };
-
-            for (int i = 0; i < 4; i++)
-                indicadores.ColumnStyles.Add(
-                    new ColumnStyle(SizeType.Percent, 25F));
-
-            indicadores.Controls.Add(
-                CriarMiniIndicadorDetalhe(
-                    "Marketing",
-                    anterior.ContatosMarketing,
-                    atual.ContatosMarketing,
-                    false),
-                0,
-                0);
-
-            indicadores.Controls.Add(
-                CriarMiniIndicadorDetalhe(
-                    "Mensagens template",
-                    anterior.MensagensTemplate,
-                    atual.MensagensTemplate,
-                    true),
-                1,
-                0);
-
-            indicadores.Controls.Add(
-                CriarMiniIndicadorDetalhe(
-                    "Encerrados por inatividade",
-                    ValorMotivo(anterior, "Encerrado por inatividade do cliente"),
-                    ValorMotivo(atual, "Encerrado por inatividade do cliente"),
-                    true),
-                2,
-                0);
-
-            indicadores.Controls.Add(
-                CriarMiniIndicadorDetalhe(
-                    "Orçamentos de fórmula",
-                    ValorMotivo(anterior, "Orçamento de fórmula"),
-                    ValorMotivo(atual, "Orçamento de fórmula"),
-                    false),
-                3,
-                0);
-
-            corpo.Controls.Add(indicadores, 0, 1);
-
-            TableLayoutPanel analises = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 3,
-                RowCount = 1
-            };
-
-            analises.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
-            analises.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
-            analises.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
-
-            analises.Controls.Add(
-                CriarCardTextoDetalhe(
-                    "Resumo da comparação",
-                    GerarResumoExecutivo(anterior, atual, taxaAnterior, taxaAtual),
-                    CorVerdeEscuro),
-                0,
-                0);
-
-            analises.Controls.Add(
-                CriarCardTextoDetalhe(
-                    "Principais alertas",
-                    GerarAlertas(anterior, atual, taxaAnterior, taxaAtual),
-                    CorVermelho,
-                    Color.FromArgb(253, 239, 239)),
-                1,
-                0);
-
-            analises.Controls.Add(
-                CriarCardTextoDetalhe(
-                    "Oportunidades",
-                    GerarOportunidades(anterior, atual),
-                    CorVerdeEscuro,
-                    Color.FromArgb(237, 250, 241)),
-                2,
-                0);
-
-            corpo.Controls.Add(analises, 0, 2);
-
-            DataGridView grid = CriarGridDetalhe();
-
-            grid.Columns.Add("Indicador", "Indicador");
-            grid.Columns.Add("Anterior", anterior.Periodo);
-            grid.Columns.Add("Atual", atual.Periodo);
-            grid.Columns.Add("Variacao", "Variação");
-            grid.Columns.Add("Leitura", "Leitura gerencial");
-
-            DataGridViewColumn? colIndicador = grid.Columns["Indicador"];
-            DataGridViewColumn? colLeituraResumo = grid.Columns["Leitura"];
-
-            if (colIndicador != null)
-                colIndicador.FillWeight = 130;
-
-            if (colLeituraResumo != null)
-                colLeituraResumo.FillWeight = 190;
-
-            AdicionarIndicadorResumo(
-                grid,
-                "Conversas recebidas",
-                anterior.Conversas,
-                atual.Conversas,
-                "Demanda total recebida.");
-
-            AdicionarIndicadorResumo(
-                grid,
-                "Atendimentos finalizados",
-                anterior.Finalizados,
-                atual.Finalizados,
-                "Capacidade de fechamento da equipe.");
-
-            grid.Rows.Add(
-                "Taxa de finalização",
-                taxaAnterior.ToString("0.0", PtBr) + "%",
-                taxaAtual.ToString("0.0", PtBr) + "%",
-                FormatarDeltaPp(taxaAnterior, taxaAtual),
-                "Compare a evolução da demanda com a capacidade de finalizar.");
-
-            AdicionarIndicadorResumo(
-                grid,
-                "Novos contatos",
-                anterior.NovosContatos,
-                atual.NovosContatos,
-                "Entrada de novos clientes/contatos.");
-
-            AdicionarIndicadorResumo(
-                grid,
-                "Reagendamentos",
-                anterior.Reagendamentos,
-                atual.Reagendamentos,
-                "Crescimento relevante deve ser investigado por motivo.");
-
-            grid.Rows.Add(
-                "Nota média",
-                anterior.NotaMedia > 0 ? anterior.NotaMedia.ToString("0.00", PtBr) : "—",
-                atual.NotaMedia > 0 ? atual.NotaMedia.ToString("0.00", PtBr) : "—",
-                anterior.NotaMedia > 0 && atual.NotaMedia > 0
-                    ? FormatarDeltaSimples(anterior.NotaMedia, atual.NotaMedia)
-                    : "—",
-                "Percepção de qualidade do atendimento.");
-
-            corpo.Controls.Add(
-                CriarCardComGrid(
-                    "Comparação dos principais indicadores",
-                    grid),
-                0,
-                3);
-
-            return pagina;
-        }
-
-        private Control CriarMiniIndicadorDetalhe(
-            string titulo,
-            int anterior,
-            int atual,
-            bool aumentoPodeSerRuim)
-        {
-            RoundedPanel card = CriarCardDetalhe();
-            double? variacao = CalcularVariacaoPercentual(anterior, atual);
-
-            Color cor = CorCinza;
-
-            if (variacao.HasValue)
-            {
-                if (aumentoPodeSerRuim)
-                    cor = variacao.Value > 0 ? CorVermelho : CorVerde;
-                else
-                    cor = variacao.Value >= 0 ? CorVerde : CorVermelho;
-            }
-
-            TableLayoutPanel layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                RowCount = 4,
-                ColumnCount = 1,
-                Padding = new Padding(13, 8, 10, 7)
-            };
-
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 22F));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-            layout.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = titulo,
-                ForeColor = CorTexto,
-                Font = new Font("Segoe UI", 8.5F)
-            }, 0, 0);
-
-            layout.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = atual.ToString("N0", PtBr),
-                ForeColor = CorTexto,
-                Font = new Font("Segoe UI Semibold", 14F, FontStyle.Bold)
-            }, 0, 1);
-
-            layout.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = FormatarVariacaoDetalhe(variacao),
-                ForeColor = cor,
-                Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold)
-            }, 0, 2);
-
-            layout.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = "Anterior: " + anterior.ToString("N0", PtBr),
-                ForeColor = CorCinza,
-                Font = new Font("Segoe UI", 7.8F)
-            }, 0, 3);
-
-            card.Controls.Add(layout);
-            return card;
-        }
-
-        private void AdicionarIndicadorResumo(
-            DataGridView grid,
-            string indicador,
-            int anterior,
-            int atual,
-            string leitura)
-        {
-            grid.Rows.Add(
-                indicador,
-                anterior.ToString("N0", PtBr),
-                atual.ToString("N0", PtBr),
-                FormatarVariacaoDetalhe(
-                    CalcularVariacaoPercentual(anterior, atual)),
-                leitura);
-        }
-
-        // =========================================================
-        // ATENDENTES DETALHADO
-        // =========================================================
-        private Control CriarPaginaAtendentesDetalhado()
-        {
-            Panel pagina = CriarPaginaDetalheBase(
-                "Atendentes",
-                "Compare volume, nota, TMR, TME e TMA individualmente.",
-                770,
-                out TableLayoutPanel corpo);
-
-            corpo.RowCount = 3;
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 125F));
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 555F));
-
-            if (relatorioAnteriorAtual == null || relatorioAtualAtual == null)
-            {
-                corpo.Controls.Add(CriarAvisoSemComparacao(), 0, 1);
-                return pagina;
-            }
-
-            RelatorioMensal anterior = relatorioAnteriorAtual;
-            RelatorioMensal atual = relatorioAtualAtual;
-
-            List<DetalheAtendente> linhas =
-                MontarComparacaoAtendentes(anterior, atual);
-
-            TableLayoutPanel destaques = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 4,
-                RowCount = 1,
-                Padding = new Padding(0, 2, 0, 5)
-            };
-
-            for (int i = 0; i < 4; i++)
-                destaques.ColumnStyles.Add(
-                    new ColumnStyle(SizeType.Percent, 25F));
-
-            DetalheAtendente? maiorEvolucao =
-                linhas
-                    .Where(x => x.Variacao.HasValue)
-                    .OrderByDescending(x => x.Variacao)
-                    .FirstOrDefault();
-
-            DetalheAtendente? maiorQueda =
-                linhas
-                    .Where(x => x.Variacao.HasValue)
-                    .OrderBy(x => x.Variacao)
-                    .FirstOrDefault();
-
-            DetalheAtendente? melhorNota =
-                linhas
-                    .Where(x => x.NotaAtual.HasValue)
-                    .OrderByDescending(x => x.NotaAtual)
-                    .ThenByDescending(x => x.Atual)
-                    .FirstOrDefault();
-
-            DetalheAtendente? melhorTmr =
-                linhas
-                    .Where(x => x.TmrAnterior.HasValue && x.TmrAtual.HasValue)
-                    .OrderBy(x => x.TmrAtual!.Value - x.TmrAnterior!.Value)
-                    .FirstOrDefault();
-
-            destaques.Controls.Add(
-                CriarCardDestaqueDetalhe(
-                    "Maior evolução de volume",
-                    maiorEvolucao?.Nome ?? "—",
-                    FormatarVariacaoDetalhe(maiorEvolucao?.Variacao),
-                    CorVerde),
-                0,
-                0);
-
-            destaques.Controls.Add(
-                CriarCardDestaqueDetalhe(
-                    "Maior queda de volume",
-                    maiorQueda?.Nome ?? "—",
-                    FormatarVariacaoDetalhe(maiorQueda?.Variacao),
-                    CorVermelho),
-                1,
-                0);
-
-            destaques.Controls.Add(
-                CriarCardDestaqueDetalhe(
-                    "Melhor nota atual",
-                    melhorNota?.Nome ?? "—",
-                    melhorNota?.NotaAtual?.ToString("0.00", PtBr) ?? "—",
-                    CorAmarelo),
-                2,
-                0);
-
-            destaques.Controls.Add(
-                CriarCardDestaqueDetalhe(
-                    "Maior melhora no TMR",
-                    melhorTmr?.Nome ?? "—",
-                    melhorTmr == null
-                        ? "—"
-                        : FormatarDiferencaTempoDetalhe(
-                            melhorTmr.TmrAnterior,
-                            melhorTmr.TmrAtual),
-                    CorAzul),
-                3,
-                0);
-
-            corpo.Controls.Add(destaques, 0, 1);
-
-            DataGridView grid = CriarGridDetalhe();
-            grid.AutoSizeColumnsMode =
-                DataGridViewAutoSizeColumnsMode.DisplayedCells;
-
-            grid.Columns.Add("Atendente", "Atendente");
-            grid.Columns.Add("Anterior", anterior.Periodo + "\nFinalizados");
-            grid.Columns.Add("Atual", atual.Periodo + "\nFinalizados");
-            grid.Columns.Add("Variacao", "Variação");
-            grid.Columns.Add("NotaAnterior", "Nota anterior");
-            grid.Columns.Add("NotaAtual", "Nota atual");
-            grid.Columns.Add("TMRAnterior", "TMR anterior");
-            grid.Columns.Add("TMRAtual", "TMR atual");
-            grid.Columns.Add("TMEAnterior", "TME anterior");
-            grid.Columns.Add("TMEAtual", "TME atual");
-            grid.Columns.Add("TMAAnterior", "TMA anterior");
-            grid.Columns.Add("TMAAtual", "TMA atual");
-            grid.Columns.Add("Diagnostico", "Diagnóstico");
-
-            DataGridViewColumn? colDiagnostico = grid.Columns["Diagnostico"];
-
-            if (colDiagnostico != null)
-            {
-                colDiagnostico.AutoSizeMode =
-                    DataGridViewAutoSizeColumnMode.Fill;
-
-                colDiagnostico.MinimumWidth = 210;
-            }
-
-            foreach (DetalheAtendente linha in linhas.OrderByDescending(x => x.Atual))
-            {
-                grid.Rows.Add(
-                    linha.Nome,
-                    linha.Anterior.ToString("N0", PtBr),
-                    linha.Atual.ToString("N0", PtBr),
-                    FormatarVariacaoDetalhe(linha.Variacao),
-                    linha.NotaAnterior?.ToString("0.00", PtBr) ?? "—",
-                    linha.NotaAtual?.ToString("0.00", PtBr) ?? "—",
-                    FormatarTempoNullable(linha.TmrAnterior),
-                    FormatarTempoNullable(linha.TmrAtual),
-                    FormatarTempoNullable(linha.TmeAnterior),
-                    FormatarTempoNullable(linha.TmeAtual),
-                    FormatarTempoNullable(linha.TmaAnterior),
-                    FormatarTempoNullable(linha.TmaAtual),
-                    linha.Diagnostico);
-            }
-
-            corpo.Controls.Add(
-                CriarCardComGrid(
-                    "Comparação completa da equipe",
-                    grid),
-                0,
-                2);
-
-            return pagina;
-        }
-
-        private List<DetalheAtendente> MontarComparacaoAtendentes(
-            RelatorioMensal anterior,
-            RelatorioMensal atual)
-        {
-            HashSet<string> nomes =
-                new HashSet<string>(
-                    anterior.FinalizadosPorAtendente.Keys,
-                    StringComparer.OrdinalIgnoreCase);
-
-            nomes.UnionWith(atual.FinalizadosPorAtendente.Keys);
-            nomes.UnionWith(anterior.Notas.Keys);
-            nomes.UnionWith(atual.Notas.Keys);
-            nomes.UnionWith(anterior.TMR.Keys);
-            nomes.UnionWith(atual.TMR.Keys);
-            nomes.UnionWith(anterior.TME.Keys);
-            nomes.UnionWith(atual.TME.Keys);
-            nomes.UnionWith(anterior.TMA.Keys);
-            nomes.UnionWith(atual.TMA.Keys);
-
-            List<DetalheAtendente> lista = new List<DetalheAtendente>();
-
-            foreach (string nome in nomes)
-            {
-                int ant =
-                    anterior.FinalizadosPorAtendente.TryGetValue(
-                        nome,
-                        out int a)
-                        ? a
-                        : 0;
-
-                int atu =
-                    atual.FinalizadosPorAtendente.TryGetValue(
-                        nome,
-                        out int b)
-                        ? b
-                        : 0;
-
-                NotaAtendente? notaAnt =
-                    anterior.Notas.TryGetValue(
-                        nome,
-                        out NotaAtendente? na)
-                        ? na
-                        : null;
-
-                NotaAtendente? notaAtu =
-                    atual.Notas.TryGetValue(
-                        nome,
-                        out NotaAtendente? nb)
-                        ? nb
-                        : null;
-
-                TimeSpan? tmrAnt =
-                    anterior.TMR.TryGetValue(
-                        nome,
-                        out TimeSpan t1)
-                        ? t1
-                        : null;
-
-                TimeSpan? tmrAtu =
-                    atual.TMR.TryGetValue(
-                        nome,
-                        out TimeSpan t2)
-                        ? t2
-                        : null;
-
-                TimeSpan? tmeAnt =
-                    anterior.TME.TryGetValue(
-                        nome,
-                        out TimeSpan e1)
-                        ? e1
-                        : null;
-
-                TimeSpan? tmeAtu =
-                    atual.TME.TryGetValue(
-                        nome,
-                        out TimeSpan e2)
-                        ? e2
-                        : null;
-
-                TimeSpan? tmaAnt =
-                    anterior.TMA.TryGetValue(
-                        nome,
-                        out TimeSpan m1)
-                        ? m1
-                        : null;
-
-                TimeSpan? tmaAtu =
-                    atual.TMA.TryGetValue(
-                        nome,
-                        out TimeSpan m2)
-                        ? m2
-                        : null;
-
-                double? variacao =
-                    ant > 0
-                        ? ((atu - ant) / (double)ant) * 100d
-                        : null;
-
-                lista.Add(new DetalheAtendente
-                {
-                    Nome = nome,
-                    Anterior = ant,
-                    Atual = atu,
-                    Variacao = variacao,
-                    NotaAnterior =
-                        notaAnt != null && notaAnt.Votos > 0
-                            ? notaAnt.Media
-                            : null,
-                    NotaAtual =
-                        notaAtu != null && notaAtu.Votos > 0
-                            ? notaAtu.Media
-                            : null,
-                    TmrAnterior = tmrAnt,
-                    TmrAtual = tmrAtu,
-                    TmeAnterior = tmeAnt,
-                    TmeAtual = tmeAtu,
-                    TmaAnterior = tmaAnt,
-                    TmaAtual = tmaAtu,
-                    Diagnostico =
-                        GerarDiagnosticoAtendente(
-                            ant,
-                            atu,
-                            notaAnt,
-                            notaAtu,
-                            tmrAnt,
-                            tmrAtu)
-                });
-            }
-
-            return lista;
-        }
-
-        private Control CriarCardDestaqueDetalhe(
-            string titulo,
-            string nome,
-            string valor,
-            Color corValor)
-        {
-            RoundedPanel card = CriarCardDetalhe();
-
-            TableLayoutPanel layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 3,
-                Padding = new Padding(13, 9, 10, 8)
-            };
-
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24F));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28F));
-
-            layout.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = titulo,
-                ForeColor = CorCinza,
-                Font = new Font("Segoe UI", 8.3F)
-            }, 0, 0);
-
-            layout.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = nome,
-                ForeColor = CorTexto,
-                Font = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleLeft,
-                AutoEllipsis = true
-            }, 0, 1);
-
-            layout.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = valor,
-                ForeColor = corValor,
-                Font = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold)
-            }, 0, 2);
-
-            card.Controls.Add(layout);
-            return card;
-        }
-
-        // =========================================================
-        // MOTIVOS DETALHADO
-        // =========================================================
-        private Control CriarPaginaMotivosDetalhado()
-        {
-            Panel pagina = CriarPaginaDetalheBase(
-                "Motivos de Atendimento",
-                "Veja em detalhes quais motivos aumentaram, diminuíram e onde existem oportunidades.",
-                820,
-                out TableLayoutPanel corpo);
-
-            corpo.RowCount = 3;
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 325F));
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 405F));
-
-            if (relatorioAnteriorAtual == null || relatorioAtualAtual == null)
-            {
-                corpo.Controls.Add(CriarAvisoSemComparacao(), 0, 1);
-                return pagina;
-            }
-
-            RelatorioMensal anterior = relatorioAnteriorAtual;
-            RelatorioMensal atual = relatorioAtualAtual;
-
-            List<string> nomes =
-                anterior.Motivos.Keys
-                    .Union(atual.Motivos.Keys, StringComparer.OrdinalIgnoreCase)
-                    .OrderByDescending(
-                        nome => Math.Max(
-                            anterior.Motivos.TryGetValue(nome, out int a)
-                                ? a
-                                : 0,
-                            atual.Motivos.TryGetValue(nome, out int b)
-                                ? b
-                                : 0))
-                    .ToList();
-
-            List<string> top = nomes.Take(8).ToList();
-
-            ComparisonBarChart chart = new ComparisonBarChart
-            {
-                Dock = DockStyle.Fill,
-                BackColor = Color.White,
-                Categories =
-                    top.Select(AbreviarMotivo).ToArray(),
-                PreviousValues =
-                    top.Select(
-                        m => anterior.Motivos.TryGetValue(
-                            m,
-                            out int v)
-                            ? (double)v
-                            : 0d)
-                        .ToArray(),
-                CurrentValues =
-                    top.Select(
-                        m => atual.Motivos.TryGetValue(
-                            m,
-                            out int v)
-                            ? (double)v
-                            : 0d)
-                        .ToArray(),
-                PreviousLabel = anterior.Periodo,
-                CurrentLabel = atual.Periodo
-            };
-
-            RoundedPanel graficoCard = CriarCardDetalhe();
-
-            graficoCard.Controls.Add(chart);
-
-            graficoCard.Controls.Add(new Label
-            {
-                Dock = DockStyle.Top,
-                Height = 40,
-                Text =
-                    $"Principais motivos - {anterior.Periodo} x {atual.Periodo}",
-                Padding = new Padding(13, 11, 0, 0),
-                ForeColor = CorTexto,
-                Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold)
-            });
-
-            corpo.Controls.Add(graficoCard, 0, 1);
-
-            DataGridView grid = CriarGridDetalhe();
-
-            grid.Columns.Add("Motivo", "Motivo");
-            grid.Columns.Add("Anterior", anterior.Periodo);
-            grid.Columns.Add("Atual", atual.Periodo);
-            grid.Columns.Add("Diferenca", "Diferença");
-            grid.Columns.Add("Variacao", "Variação");
-            grid.Columns.Add("Leitura", "Leitura construtiva");
-
-            DataGridViewColumn? colMotivo = grid.Columns["Motivo"];
-            DataGridViewColumn? colLeituraMotivo = grid.Columns["Leitura"];
-
-            if (colMotivo != null)
-                colMotivo.FillWeight = 160;
-
-            if (colLeituraMotivo != null)
-                colLeituraMotivo.FillWeight = 190;
-
-            foreach (string nome in nomes)
-            {
-                int ant =
-                    anterior.Motivos.TryGetValue(
-                        nome,
-                        out int a)
-                        ? a
-                        : 0;
-
-                int atu =
-                    atual.Motivos.TryGetValue(
-                        nome,
-                        out int b)
-                        ? b
-                        : 0;
-
-                double? variacao =
-                    CalcularVariacaoPercentual(
-                        ant,
-                        atu);
-
-                grid.Rows.Add(
-                    nome,
-                    ant.ToString("N0", PtBr),
-                    atu.ToString("N0", PtBr),
-                    (atu - ant).ToString("+0;-0;0", PtBr),
-                    FormatarVariacaoDetalhe(variacao),
-                    GerarLeituraMotivoDetalhe(
-                        nome,
-                        variacao));
-            }
-
-            corpo.Controls.Add(
-                CriarCardComGrid(
-                    "Tabela completa dos motivos",
-                    grid),
-                0,
-                2);
-
-            return pagina;
-        }
-
-        private string GerarLeituraMotivoDetalhe(
-            string motivo,
-            double? variacao)
-        {
-            if (!variacao.HasValue)
-                return "Novo motivo ou sem base anterior.";
-
-            string normalizado = Normalizar(motivo);
-
-            if (normalizado.Contains("inatividade") &&
-                variacao.Value > 10)
-            {
-                return
-                    "Aumento merece análise do tempo de resposta, " +
-                    "abandono do cliente e fluxo de encerramento.";
-            }
-
-            if (normalizado.Contains("orcamento") &&
-                variacao.Value > 10)
-            {
-                return
-                    "Boa oportunidade comercial; acompanhar quantos " +
-                    "orçamentos se transformam em pedidos.";
-            }
-
-            if (variacao.Value >= 20)
-                return "Crescimento relevante no período.";
-
-            if (variacao.Value <= -20)
-                return "Queda relevante; verificar mudança de demanda ou processo.";
-
-            return "Variação moderada.";
-        }
-
-        // =========================================================
-        // MARKETING DETALHADO
-        // =========================================================
-        private Control CriarPaginaMarketingDetalhado()
-        {
-            Panel pagina = CriarPaginaDetalheBase(
-                "Marketing",
-                "Compare contatos de campanhas, novos contatos e mensagens template.",
-                790,
-                out TableLayoutPanel corpo);
-
-            corpo.RowCount = 4;
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 125F));
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 265F));
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 310F));
-
-            if (relatorioAnteriorAtual == null || relatorioAtualAtual == null)
-            {
-                corpo.Controls.Add(CriarAvisoSemComparacao(), 0, 1);
-                return pagina;
-            }
-
-            RelatorioMensal anterior = relatorioAnteriorAtual;
-            RelatorioMensal atual = relatorioAtualAtual;
-
-            TableLayoutPanel indicadores = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 4,
-                RowCount = 1,
-                Padding = new Padding(0, 2, 0, 5)
-            };
-
-            for (int i = 0; i < 4; i++)
-                indicadores.ColumnStyles.Add(
-                    new ColumnStyle(SizeType.Percent, 25F));
-
-            indicadores.Controls.Add(
-                CriarMiniIndicadorDetalhe(
-                    "Contatos via marketing",
-                    anterior.ContatosMarketing,
-                    atual.ContatosMarketing,
-                    false),
-                0,
-                0);
-
-            indicadores.Controls.Add(
-                CriarMiniIndicadorDetalhe(
-                    "Novos contatos",
-                    anterior.NovosContatos,
-                    atual.NovosContatos,
-                    false),
-                1,
-                0);
-
-            indicadores.Controls.Add(
-                CriarMiniIndicadorDetalhe(
-                    "Mensagens template",
-                    anterior.MensagensTemplate,
-                    atual.MensagensTemplate,
-                    true),
-                2,
-                0);
-
-            indicadores.Controls.Add(
-                CriarMiniIndicadorDetalhe(
-                    "Reagendamentos",
-                    anterior.Reagendamentos,
-                    atual.Reagendamentos,
-                    true),
-                3,
-                0);
-
-            corpo.Controls.Add(indicadores, 0, 1);
-
-            List<string> campanhas =
-                anterior.MarketingCriativos.Keys
-                    .Union(
-                        atual.MarketingCriativos.Keys,
-                        StringComparer.OrdinalIgnoreCase)
-                    .OrderByDescending(
-                        nome => Math.Max(
-                            anterior.MarketingCriativos.TryGetValue(
-                                nome,
-                                out int a)
-                                ? a
-                                : 0,
-                            atual.MarketingCriativos.TryGetValue(
-                                nome,
-                                out int b)
-                                ? b
-                                : 0))
-                    .ToList();
-
-            List<string> top = campanhas.Take(7).ToList();
-
-            ComparisonBarChart chart = new ComparisonBarChart
-            {
-                Dock = DockStyle.Fill,
-                BackColor = Color.White,
-                Categories =
-                    top.Select(
-                        x => x.Length <= 18
-                            ? x
-                            : x.Substring(0, 17) + "…")
-                        .ToArray(),
-                PreviousValues =
-                    top.Select(
-                        x => anterior.MarketingCriativos.TryGetValue(
-                            x,
-                            out int v)
-                            ? (double)v
-                            : 0d)
-                        .ToArray(),
-                CurrentValues =
-                    top.Select(
-                        x => atual.MarketingCriativos.TryGetValue(
-                            x,
-                            out int v)
-                            ? (double)v
-                            : 0d)
-                        .ToArray(),
-                PreviousLabel = anterior.Periodo,
-                CurrentLabel = atual.Periodo
-            };
-
-            RoundedPanel chartCard = CriarCardDetalhe();
-            chartCard.Controls.Add(chart);
-
-            chartCard.Controls.Add(new Label
-            {
-                Dock = DockStyle.Top,
-                Height = 40,
-                Text = "Contatos por criativo/campanha",
-                Padding = new Padding(13, 11, 0, 0),
-                ForeColor = CorTexto,
-                Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold)
-            });
-
-            corpo.Controls.Add(chartCard, 0, 2);
-
-            DataGridView grid = CriarGridDetalhe();
-
-            grid.Columns.Add("Criativo", "Criativo / campanha");
-            grid.Columns.Add("Anterior", anterior.Periodo);
-            grid.Columns.Add("Atual", atual.Periodo);
-            grid.Columns.Add("Diferenca", "Diferença");
-            grid.Columns.Add("Variacao", "Variação");
-            grid.Columns.Add("Observacao", "Observação");
-
-            DataGridViewColumn? colCriativo = grid.Columns["Criativo"];
-            DataGridViewColumn? colObservacaoMarketing = grid.Columns["Observacao"];
-
-            if (colCriativo != null)
-                colCriativo.FillWeight = 170;
-
-            if (colObservacaoMarketing != null)
-                colObservacaoMarketing.FillWeight = 180;
-
-            foreach (string campanha in campanhas)
-            {
-                int ant =
-                    anterior.MarketingCriativos.TryGetValue(
-                        campanha,
-                        out int a)
-                        ? a
-                        : 0;
-
-                int atu =
-                    atual.MarketingCriativos.TryGetValue(
-                        campanha,
-                        out int b)
-                        ? b
-                        : 0;
-
-                double? variacao =
-                    CalcularVariacaoPercentual(
-                        ant,
-                        atu);
-
-                string observacao =
-                    !variacao.HasValue
-                        ? "Novo criativo no período atual."
-                        : variacao.Value >= 20
-                            ? "Crescimento relevante."
-                            : variacao.Value <= -20
-                                ? "Queda relevante; verificar campanha e período."
-                                : "Resultado relativamente estável.";
-
-                grid.Rows.Add(
-                    campanha,
-                    ant.ToString("N0", PtBr),
-                    atu.ToString("N0", PtBr),
-                    (atu - ant).ToString("+0;-0;0", PtBr),
-                    FormatarVariacaoDetalhe(variacao),
-                    observacao);
-            }
-
-            corpo.Controls.Add(
-                CriarCardComGrid(
-                    "Comparação detalhada das campanhas",
-                    grid),
-                0,
-                3);
-
-            return pagina;
-        }
-
-        // =========================================================
-        // QUALIDADE DOS DADOS
-        // =========================================================
-        private Control CriarPaginaQualidadeDetalhado()
-        {
-            Panel pagina = CriarPaginaDetalheBase(
-                "Qualidade dos Dados",
-                "Confira ausências, divergências e limitações antes de usar os números para decisões.",
-                710,
-                out TableLayoutPanel corpo);
-
-            corpo.RowCount = 3;
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 205F));
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 420F));
-
-            if (relatorioAnteriorAtual == null || relatorioAtualAtual == null)
-            {
-                corpo.Controls.Add(CriarAvisoSemComparacao(), 0, 1);
-                return pagina;
-            }
-
-            RelatorioMensal anterior = relatorioAnteriorAtual;
-            RelatorioMensal atual = relatorioAtualAtual;
-
-            TableLayoutPanel topo = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 1
-            };
-
-            topo.ColumnStyles.Add(
-                new ColumnStyle(SizeType.Percent, 50F));
-
-            topo.ColumnStyles.Add(
-                new ColumnStyle(SizeType.Percent, 50F));
-
-            topo.Controls.Add(
-                CriarCardTextoDetalhe(
-                    "Leitura do mês retrasado",
-                    CriarResumoQualidade(anterior),
-                    CorAmarelo),
-                0,
-                0);
-
-            topo.Controls.Add(
-                CriarCardTextoDetalhe(
-                    "Leitura do mês passado",
-                    CriarResumoQualidade(atual),
-                    CorAmarelo),
-                1,
-                0);
-
-            corpo.Controls.Add(topo, 0, 1);
-
-            DataGridView grid = CriarGridDetalhe();
-
-            grid.Columns.Add("Item", "Verificação");
-            grid.Columns.Add("Anterior", anterior.Periodo);
-            grid.Columns.Add("Atual", atual.Periodo);
-            grid.Columns.Add("Status", "Status");
-            grid.Columns.Add("Observacao", "Observação");
-
-            DataGridViewColumn? colItem = grid.Columns["Item"];
-            DataGridViewColumn? colObservacaoQualidade = grid.Columns["Observacao"];
-
-            if (colItem != null)
-                colItem.FillWeight = 150;
-
-            if (colObservacaoQualidade != null)
-                colObservacaoQualidade.FillWeight = 210;
-
-            grid.Rows.Add(
-                "TMA disponível",
-                anterior.TmaDisponivel ? "Sim" : "Não",
-                atual.TmaDisponivel ? "Sim" : "Não",
-                atual.TmaDisponivel ? "OK" : "Atenção",
-                atual.TmaDisponivel
-                    ? "Indicador disponível para comparação."
-                    : "O TMA do período atual não possui valores.");
-
-            grid.Rows.Add(
-                "Total de atendimentos da relação x finalizados",
-                anterior.AtendimentosRelacao.HasValue
-                    ? $"{anterior.AtendimentosRelacao.Value:N0} x {anterior.Finalizados:N0}"
-                    : "—",
-                atual.AtendimentosRelacao.HasValue
-                    ? $"{atual.AtendimentosRelacao.Value:N0} x {atual.Finalizados:N0}"
-                    : "—",
-                "Informativo",
-                "Os dois números podem representar etapas diferentes; a diferença fica visível para conferência.");
-
-            string divergAnterior =
-                ObterDivergenciaPossivelVenda(anterior);
-
-            string divergAtual =
-                ObterDivergenciaPossivelVenda(atual);
-
-            grid.Rows.Add(
-                "Orçamento de fórmula em seções diferentes",
-                divergAnterior,
-                divergAtual,
-                divergAtual == "Sem divergência"
-                    ? "OK"
-                    : "Atenção",
-                "Quando o mesmo indicador aparece com valores diferentes, o sistema não escolhe automaticamente qual é o correto.");
-
-            grid.Rows.Add(
-                "Nota média geral",
-                anterior.NotaMedia > 0
-                    ? anterior.NotaMedia.ToString("0.00", PtBr)
-                    : "Ausente",
-                atual.NotaMedia > 0
-                    ? atual.NotaMedia.ToString("0.00", PtBr)
-                    : "Ausente",
-                anterior.NotaMedia > 0 && atual.NotaMedia > 0
-                    ? "OK"
-                    : "Atenção",
-                "A média geral é usada no KPI de satisfação.");
-
-            corpo.Controls.Add(
-                CriarCardComGrid(
-                    "Checklist de integridade",
-                    grid),
-                0,
-                2);
-
-            return pagina;
-        }
-
-        private string CriarResumoQualidade(RelatorioMensal relatorio)
-        {
-            List<string> linhas = new List<string>();
-
-            linhas.Add(
-                relatorio.Conversas > 0
-                    ? "✓ Total de conversas localizado."
-                    : "⚠ Total de conversas não localizado.");
-
-            linhas.Add(
-                relatorio.Finalizados > 0
-                    ? "✓ Total de finalizados localizado."
-                    : "⚠ Total de finalizados não localizado.");
-
-            linhas.Add(
-                relatorio.TMR.Count > 0
-                    ? "✓ TMR disponível."
-                    : "⚠ TMR sem dados.");
-
-            linhas.Add(
-                relatorio.TME.Count > 0
-                    ? "✓ TME disponível."
-                    : "⚠ TME sem dados.");
-
-            linhas.Add(
-                relatorio.TmaDisponivel
-                    ? "✓ TMA disponível."
-                    : "⚠ TMA sem dados.");
-
-            if (ObterDivergenciaPossivelVenda(relatorio) != "Sem divergência")
-            {
-                linhas.Add(
-                    "⚠ Existe divergência em 'Orçamento de fórmula'.");
-            }
-
-            return string.Join(
-                Environment.NewLine + Environment.NewLine,
-                linhas);
-        }
-
-        private string ObterDivergenciaPossivelVenda(
-            RelatorioMensal relatorio)
-        {
-            int principal =
-                ValorMotivo(
-                    relatorio,
-                    "Orçamento de fórmula");
-
-            if (relatorio.PossiveisVendas.TryGetValue(
-                    "Orçamento de fórmula",
-                    out int possivel) &&
-                principal != possivel)
-            {
-                return
-                    $"{principal.ToString("N0", PtBr)} x " +
-                    $"{possivel.ToString("N0", PtBr)}";
-            }
-
-            return "Sem divergência";
-        }
-
-        // =========================================================
-        // EXPORTAÇÃO
-        // =========================================================
-        private Control CriarPaginaExportarDetalhado()
-        {
-            Panel pagina = CriarPaginaDetalheBase(
-                "Exportar",
-                "Gere o relatório consolidado depois de realizar a comparação.",
-                570,
-                out TableLayoutPanel corpo);
-
-            corpo.RowCount = 3;
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 230F));
-            corpo.RowStyles.Add(new RowStyle(SizeType.Absolute, 250F));
-
-            if (relatorioAnteriorAtual == null || relatorioAtualAtual == null)
-            {
-                corpo.Controls.Add(CriarAvisoSemComparacao(), 0, 1);
-                return pagina;
-            }
-
-            TableLayoutPanel cards = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 1,
-                Padding = new Padding(0, 10, 0, 10)
-            };
-
-            cards.ColumnStyles.Add(
-                new ColumnStyle(SizeType.Percent, 50F));
-
-            cards.ColumnStyles.Add(
-                new ColumnStyle(SizeType.Percent, 50F));
-
-            cards.Controls.Add(
-                CriarCardAcaoDetalhe(
-                    "Exportar Excel",
-                    "Gera um arquivo consolidado com resumo, motivos, atendentes, marketing e qualidade.",
-                    "Exportar Excel",
-                    () =>
-                    {
-                        MessageBox.Show(
-                            "A exportação para Excel pode ser ligada na próxima etapa.",
-                            "Exportar Excel",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
-                    }),
-                0,
-                0);
-
-            cards.Controls.Add(
-                CriarCardAcaoDetalhe(
-                    "Exportar PDF",
-                    "Gera uma versão visual do relatório para apresentação e arquivamento.",
-                    "Exportar PDF",
-                    () =>
-                    {
-                        MessageBox.Show(
-                            "A exportação para PDF pode ser ligada na próxima etapa.",
-                            "Exportar PDF",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
-                    }),
-                1,
-                0);
-
-            corpo.Controls.Add(cards, 0, 1);
-
-            corpo.Controls.Add(
-                CriarCardTextoDetalhe(
-                    "Conteúdo sugerido do relatório",
-                    "• Resumo executivo e KPIs\n\n" +
-                    "• Comparação dos motivos de atendimento\n\n" +
-                    "• Desempenho completo dos atendentes\n\n" +
-                    "• Marketing e mensagens template\n\n" +
-                    "• Qualidade dos dados\n\n" +
-                    "• Alertas e ações recomendadas",
-                    CorVerdeEscuro),
-                0,
-                2);
-
-            return pagina;
-        }
-
-        private Control CriarCardAcaoDetalhe(
-            string titulo,
-            string descricao,
-            string textoBotao,
-            Action acao)
-        {
-            RoundedPanel card = CriarCardDetalhe();
-
-            TableLayoutPanel layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 3,
-                Padding = new Padding(18, 14, 18, 14)
-            };
-
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 35F));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44F));
-
-            layout.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = titulo,
-                ForeColor = CorTexto,
-                Font = new Font("Segoe UI Semibold", 11F, FontStyle.Bold)
-            }, 0, 0);
-
-            layout.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = descricao,
-                ForeColor = CorCinza,
-                Font = new Font("Segoe UI", 9F)
-            }, 0, 1);
-
-            Button btn = new Button
-            {
-                Text = textoBotao,
-                Width = 145,
-                Height = 38,
-                Dock = DockStyle.Left,
-                BackColor = CorVerde,
-                ForeColor = Color.White,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI Semibold", 9F),
-                Cursor = Cursors.Hand
-            };
-
-            btn.FlatAppearance.BorderSize = 0;
-            btn.Click += (s, e) => acao();
-
-            layout.Controls.Add(btn, 0, 2);
-            card.Controls.Add(layout);
-
-            return card;
-        }
-
-        // =========================================================
-        // HELPERS DAS TELAS DETALHADAS
-        // =========================================================
-        private static string FormatarVariacaoDetalhe(
-            double? variacao)
-        {
-            if (!variacao.HasValue)
-                return "Novo";
-
-            if (Math.Abs(variacao.Value) < 0.05)
-                return "0,0%";
-
-            return
-                $"{(variacao.Value > 0 ? "▲" : "▼")} " +
-                $"{Math.Abs(variacao.Value).ToString("0.0", PtBr)}%";
-        }
-
-        private static string FormatarDeltaPp(
-            double anterior,
-            double atual)
-        {
-            double delta = atual - anterior;
-
-            return
-                $"{(delta >= 0 ? "▲" : "▼")} " +
-                $"{Math.Abs(delta).ToString("0.0", PtBr)} p.p.";
-        }
-
-        private static string FormatarDeltaSimples(
-            double anterior,
-            double atual)
-        {
-            double delta = atual - anterior;
-
-            return
-                $"{(delta >= 0 ? "▲" : "▼")} " +
-                $"{Math.Abs(delta).ToString("0.00", PtBr)}";
-        }
-
-        private static string FormatarTempoNullable(
-            TimeSpan? tempo)
-        {
-            return tempo.HasValue
-                ? FormatarTempo(tempo.Value)
-                : "—";
-        }
-
-        private static string FormatarDiferencaTempoDetalhe(
-            TimeSpan? anterior,
-            TimeSpan? atual)
-        {
-            if (!anterior.HasValue || !atual.HasValue)
-                return "—";
-
-            TimeSpan diferenca =
-                atual.Value - anterior.Value;
-
-            string seta =
-                diferenca.TotalSeconds <= 0
-                    ? "▼"
-                    : "▲";
-
-            diferenca = diferenca.Duration();
-
-            if (diferenca.TotalHours >= 1)
-            {
-                return
-                    $"{seta} {(int)diferenca.TotalHours}h " +
-                    $"{diferenca.Minutes:00}m";
-            }
-
-            return
-                $"{seta} {diferenca.Minutes}m " +
-                $"{diferenca.Seconds:00}s";
-        }
-
-        private sealed class DetalheAtendente
-        {
-            public string Nome { get; set; } = string.Empty;
-            public int Anterior { get; set; }
-            public int Atual { get; set; }
-            public double? Variacao { get; set; }
-            public double? NotaAnterior { get; set; }
-            public double? NotaAtual { get; set; }
-            public TimeSpan? TmrAnterior { get; set; }
-            public TimeSpan? TmrAtual { get; set; }
-            public TimeSpan? TmeAnterior { get; set; }
-            public TimeSpan? TmeAtual { get; set; }
-            public TimeSpan? TmaAnterior { get; set; }
-            public TimeSpan? TmaAtual { get; set; }
-            public string Diagnostico { get; set; } = string.Empty;
-        }
-
-        // =========================================================
-        // SELEÇÃO DOS ARQUIVOS
-        // =========================================================
-        private void EscolherMesRetrasado(object? sender, EventArgs e)
-        {
-            using OpenFileDialog ofd = new OpenFileDialog
-            {
-                Title = "Selecione a planilha do mês retrasado",
-                Filter = "Arquivos Excel (*.xlsx;*.xlsm)|*.xlsx;*.xlsm",
-                CheckFileExists = true,
-                Multiselect = false
+                Title = "Selecione o Excel do mês retrasado",
+                Filter = "Excel (*.xlsx;*.xlsm)|*.xlsx;*.xlsm",
+                Multiselect = false,
+                CheckFileExists = true
             };
 
             if (ofd.ShowDialog() != DialogResult.OK)
                 return;
 
-            caminhoMesRetrasado = ofd.FileName;
-            relatorioAnteriorAtual = null;
-            relatorioAtualAtual = null;
-            LimparResultados();
-
-            txtMesRetrasado.Text = Path.GetFileName(ofd.FileName);
-            lblPeriodo1.Text = "Arquivo selecionado";
-            lblPeriodo2.Text = string.Empty;
-            AtualizarStatusArquivos();
+            caminhoAnterior = ofd.FileName;
+            txtAnterior.Text = Path.GetFileName(ofd.FileName);
+            lblPeriodoAnterior.Text = "Arquivo selecionado. Clique em COMPARAR.";
         }
 
-        private void EscolherMesPassado(object? sender, EventArgs e)
+        private void SelecionarAtual(object sender, EventArgs e)
         {
-            using OpenFileDialog ofd = new OpenFileDialog
+            using var ofd = new OpenFileDialog
             {
-                Title = "Selecione a planilha do mês passado",
-                Filter = "Arquivos Excel (*.xlsx;*.xlsm)|*.xlsx;*.xlsm",
-                CheckFileExists = true,
-                Multiselect = false
+                Title = "Selecione o Excel do mês passado",
+                Filter = "Excel (*.xlsx;*.xlsm)|*.xlsx;*.xlsm",
+                Multiselect = false,
+                CheckFileExists = true
             };
 
             if (ofd.ShowDialog() != DialogResult.OK)
                 return;
 
-            caminhoMesPassado = ofd.FileName;
-            relatorioAnteriorAtual = null;
-            relatorioAtualAtual = null;
-            LimparResultados();
-
-            txtMesPassado.Text = Path.GetFileName(ofd.FileName);
-            lblPeriodo2.Text = "Arquivo selecionado";
-            lblPeriodo1.Text = string.IsNullOrWhiteSpace(caminhoMesRetrasado)
-                ? string.Empty
-                : "Arquivo selecionado";
-            AtualizarStatusArquivos();
+            caminhoAtual = ofd.FileName;
+            txtAtual.Text = Path.GetFileName(ofd.FileName);
+            lblPeriodoAtual.Text = "Arquivo selecionado. Clique em COMPARAR.";
         }
 
-        private void AtualizarStatusArquivos()
+        private void BtnComparar_Click(object sender, EventArgs e)
         {
-            bool primeiro = !string.IsNullOrWhiteSpace(caminhoMesRetrasado);
-            bool segundo = !string.IsNullOrWhiteSpace(caminhoMesPassado);
-
-            if (primeiro && segundo)
-                lblStatus.Text = "●  Os dois arquivos estão selecionados. Clique em Comparar.";
-            else if (primeiro || segundo)
-                lblStatus.Text = "●  Um arquivo selecionado. Selecione o segundo.";
-            else
-                lblStatus.Text = "●  Aguardando os dois arquivos.";
-        }
-
-        // =========================================================
-        // COMPARAR - AGORA LÊ OS DOIS EXCEL DE VERDADE
-        // =========================================================
-        private void BtnComparar_Click(object? sender, EventArgs e)
-        {
-            if (!ValidarArquivos())
+            if (string.IsNullOrWhiteSpace(caminhoAnterior) || !File.Exists(caminhoAnterior))
+            {
+                MessageBox.Show("Selecione o arquivo do mês retrasado.", "Arquivo necessário",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
+            }
+
+            if (string.IsNullOrWhiteSpace(caminhoAtual) || !File.Exists(caminhoAtual))
+            {
+                MessageBox.Show("Selecione o arquivo do mês passado.", "Arquivo necessário",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
             try
             {
                 Cursor = Cursors.WaitCursor;
-                lblStatus.Text = "●  Lendo e comparando as planilhas...";
-                Application.DoEvents();
 
-                RelatorioMensal anterior = LerRelatorioExcel(caminhoMesRetrasado);
-                RelatorioMensal atual = LerRelatorioExcel(caminhoMesPassado);
+                dadosAnterior = LerArquivo(caminhoAnterior);
+                dadosAtual = LerArquivo(caminhoAtual);
 
-                relatorioAnteriorAtual = anterior;
-                relatorioAtualAtual = atual;
+                comparacaoRealizada = true;
 
-                PreencherDashboard(anterior, atual);
+                lblPeriodoAnterior.Text = $"Período: {dadosAnterior.Periodo}";
+                lblPeriodoAtual.Text = $"Período: {dadosAtual.Periodo}";
 
-                lblPeriodo1.Text = anterior.Periodo;
-                lblPeriodo2.Text = atual.Periodo;
-                lblStatus.Text = $"●  Comparação concluída: {anterior.Periodo} x {atual.Periodo}.";
+                MostrarPagina("Comparativo");
             }
             catch (Exception ex)
             {
-                LimparResultados();
-                lblStatus.Text = "●  Não foi possível concluir a comparação.";
-
+                comparacaoRealizada = false;
                 MessageBox.Show(
-                    "Não foi possível ler os arquivos.\n\n" +
-                    "Verifique se as planilhas mantêm as abas e os títulos do relatório.\n\n" +
+                    "Não consegui ler uma das planilhas.\n\n" +
                     "Detalhe: " + ex.Message,
                     "Erro ao comparar",
                     MessageBoxButtons.OK,
@@ -2707,1404 +1834,3186 @@ namespace RelatorioAtendimento
             }
         }
 
-        private bool ValidarArquivos()
+        private void LimparDados()
         {
-            if (string.IsNullOrWhiteSpace(caminhoMesRetrasado) || !File.Exists(caminhoMesRetrasado))
-            {
-                MessageBox.Show("Selecione a planilha do mês retrasado.", "Arquivo necessário",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
+            caminhoAnterior = "";
+            caminhoAtual = "";
+            dadosAnterior = null;
+            dadosAtual = null;
+            comparacaoRealizada = false;
 
-            if (string.IsNullOrWhiteSpace(caminhoMesPassado) || !File.Exists(caminhoMesPassado))
-            {
-                MessageBox.Show("Selecione a planilha do mês passado.", "Arquivo necessário",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
+            txtAnterior.Text = "Nenhum arquivo selecionado";
+            txtAtual.Text = "Nenhum arquivo selecionado";
+            lblPeriodoAnterior.Text = "Período: aguardando arquivo...";
+            lblPeriodoAtual.Text = "Período: aguardando arquivo...";
 
-            if (string.Equals(caminhoMesRetrasado, caminhoMesPassado, StringComparison.OrdinalIgnoreCase))
-            {
-                MessageBox.Show("Selecione dois arquivos diferentes.", "Arquivos iguais",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
-
-            return true;
+            MostrarPagina("Comparativo");
         }
 
-        // =========================================================
-        // LEITURA DO RELATÓRIO
-        // =========================================================
-        private RelatorioMensal LerRelatorioExcel(string caminho)
+        // ============================================================
+        // LEITURA DO EXCEL
+        // ============================================================
+        private DadosMes LerArquivo(string caminho)
         {
-            using XLWorkbook workbook = new XLWorkbook(caminho);
+            using var wb = new XLWorkbook(caminho);
 
-            RelatorioMensal r = new RelatorioMensal();
-
-            IXLWorksheet wsRelacao = ObterAbaObrigatoria(workbook, "Relação Conversas-Atendimento");
-            IXLWorksheet wsNovos = ObterAbaObrigatoria(workbook, "Mensagens por número");
-            IXLWorksheet wsMarketing = ObterAbaObrigatoria(workbook, "Marketing");
-            IXLWorksheet wsTemplate = ObterAbaObrigatoria(workbook, "Mensagem Template");
-            IXLWorksheet wsMotivos = ObterAbaObrigatoria(workbook, "Motivos Atendimento");
-            IXLWorksheet wsFinalizados = ObterAbaObrigatoria(workbook, "Atendimentos finalizados");
-            IXLWorksheet wsTmr = ObterAbaObrigatoria(workbook, "TMR");
-
-            IXLWorksheet? wsTme = ObterAbaOpcional(workbook, "TME");
-            IXLWorksheet? wsTma = ObterAbaOpcional(workbook, "TMA");
-            IXLWorksheet? wsMedia = ObterAbaOpcional(workbook, "MEDIA - IND", "Média individual");
-
-            r.DataReferencia = DetectarDataReferencia(wsRelacao) ?? DateTime.MinValue;
-            r.Periodo = r.DataReferencia == DateTime.MinValue
-                ? Path.GetFileNameWithoutExtension(caminho)
-                : CultureInfo.GetCultureInfo("pt-BR").DateTimeFormat.GetMonthName(r.DataReferencia.Month)
-                    .FirstCharToUpper() + "/" + r.DataReferencia.Year;
-
-            List<int> totaisRelacao = LerTotaisMes(wsRelacao);
-            r.Conversas = totaisRelacao.Count > 0 ? totaisRelacao[0] : 0;
-            r.AtendimentosRelacao = totaisRelacao.Count > 1 ? totaisRelacao[1] : null;
-
-            r.NovosContatos = LerPrimeiroTotalColunaAB(wsNovos);
-            r.ContatosMarketing = LerTotalMarketing(wsMarketing);
-            r.MarketingCriativos = LerCriativosMarketing(wsMarketing);
-            r.Reagendamentos = LerValorPorLabel(wsTemplate, "reagendamento");
-            r.MensagensTemplate = LerValorPorLabel(wsTemplate, "total geral");
-
-            r.Motivos = LerTabelaMotivosPrincipal(wsMotivos);
-            r.PossiveisVendas = LerSecaoMotivos(wsMotivos, "possivel venda");
-
-            (r.Finalizados, r.FinalizadosPorAtendente) = LerFinalizados(wsFinalizados);
-            r.TMR = LerTempos(wsTmr);
-            r.TME = wsTme == null
-                ? new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase)
-                : LerTempos(wsTme);
-
-            r.TMA = wsTma == null
-                ? new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase)
-                : LerTempos(wsTma);
-
-            r.TmaDisponivel = r.TMA.Count > 0;
-
-            if (wsMedia != null)
+            var d = new DadosMes
             {
-                r.Notas = LerNotasAtendentes(wsMedia);
-                r.NotaMedia = LerMediaGeral(wsMedia);
+                Arquivo = caminho,
+                Periodo = DescobrirPeriodo(wb, caminho)
+            };
+
+            // Conversas
+            var wsRelacao = ObterAba(wb, "Relação Conversas-Atendimento");
+            if (wsRelacao != null)
+                d.Conversas = ProcurarValorAposRotulo(wsRelacao, "TOTAL MÊS", colunasADireita: 2);
+
+            // Novos contatos
+            var wsMensagens = ObterAba(wb, "Mensagens por número");
+            if (wsMensagens != null)
+                d.NovosContatos = ProcurarPrimeiroTotal(wsMensagens, 1, 2, 45);
+
+            // Finalizados
+            var wsFinal = ObterAba(wb, "Atendimentos finalizados");
+            if (wsFinal != null)
+            {
+                d.AtendentesFinalizados = LerListaNomeValor(wsFinal, pararEmTotal: true);
+                d.Finalizados = ProcurarUltimoTotal(wsFinal);
             }
 
-            return r;
-        }
-
-        private static IXLWorksheet ObterAbaObrigatoria(XLWorkbook workbook, string nome)
-        {
-            if (workbook.TryGetWorksheet(nome, out IXLWorksheet? ws))
-                return ws;
-
-            throw new InvalidOperationException($"A aba '{nome}' não foi encontrada.");
-        }
-
-        private static IXLWorksheet? ObterAbaOpcional(XLWorkbook workbook, params string[] nomes)
-        {
-            foreach (string nome in nomes)
+            // Motivos
+            var wsMotivos = ObterAba(wb, "Motivos Atendimento");
+            if (wsMotivos != null)
             {
-                if (workbook.TryGetWorksheet(nome, out IXLWorksheet? ws))
-                    return ws;
+                d.Motivos = LerMotivosPrincipais(wsMotivos);
+                d.Inatividade = ValorPorDescricao(d.Motivos, "Encerrado por inatividade do cliente");
+                d.OrcamentoFormula = ValorPorDescricao(d.Motivos, "Orçamento de fórmula");
+
+                d.OrcamentoFormulaPossivelVenda = ProcurarValorNaSecao(
+                    wsMotivos, "Possível venda", "Orçamento de fórmula");
             }
 
-            return null;
+            // Templates
+            var wsTemplate = ObterAba(wb, "Mensagem Template");
+            if (wsTemplate != null)
+            {
+                d.Reagendamentos = ProcurarPorInicioDeTexto(
+                    wsTemplate, new[] { "Reagendamento", "Reagendamentos entregues" });
+
+                d.TemplatesTotal = ProcurarUltimoTotal(wsTemplate);
+            }
+
+            // Marketing
+            var wsMarketing = ObterAba(wb, "Marketing");
+            if (wsMarketing != null)
+            {
+                d.MarketingCriativos = LerMarketing(wsMarketing);
+                d.MarketingTotal = ProcurarUltimoTotal(wsMarketing);
+            }
+
+            // TMR / TME / TMA
+            var wsTmr = ObterAba(wb, "TMR");
+            if (wsTmr != null) d.TMR = LerNomeTempo(wsTmr);
+
+            var wsTme = ObterAba(wb, "TME");
+            if (wsTme != null) d.TME = LerNomeTempo(wsTme);
+
+            var wsTma = ObterAba(wb, "TMA");
+            if (wsTma != null) d.TMA = LerNomeTempo(wsTma);
+
+            // Notas
+            var wsNotas = ObterAba(wb, "MEDIA - IND") ?? ObterAba(wb, "Média individual");
+            if (wsNotas != null)
+            {
+                d.Notas = LerNotas(wsNotas);
+                d.NotaGeral = AjustarNota(ProcurarValorAoLado(wsNotas, "Média geral (W.L + Gurgel)"));
+                d.NotaWL = AjustarNota(ProcurarNotaUnidade(wsNotas, "W.L"));
+                d.NotaGurgel = AjustarNota(ProcurarNotaUnidade(wsNotas, "Gurgel"));
+            }
+
+            return d;
         }
 
-        private static DateTime? DetectarDataReferencia(IXLWorksheet ws)
+        private IXLWorksheet ObterAba(XLWorkbook wb, string nome)
         {
-            IXLRange? used = ws.RangeUsed();
-            if (used == null)
+            string alvo = NormalizarTexto(nome);
+            return wb.Worksheets.FirstOrDefault(w => NormalizarTexto(w.Name) == alvo);
+        }
+
+        private string DescobrirPeriodo(XLWorkbook wb, string caminho)
+        {
+            var ws = ObterAba(wb, "Relação Conversas-Atendimento");
+            if (ws != null)
+            {
+                var range = ws.RangeUsed();
+                if (range != null)
+                {
+                    foreach (var cell in range.Cells())
+                    {
+                        if (cell.TryGetValue<DateTime>(out var dt) &&
+                            dt.Year >= 2020 && dt.Year <= 2100)
+                        {
+                            return CultureInfo.GetCultureInfo("pt-BR")
+                                .TextInfo.ToTitleCase(dt.ToString("MMMM/yyyy", new CultureInfo("pt-BR")));
+                        }
+
+                        string txt = cell.GetFormattedString().Trim();
+                        if (DateTime.TryParseExact(txt,
+                            new[] { "dd/MM/yyyy", "d/M/yyyy", "dd/MM/yy" },
+                            new CultureInfo("pt-BR"),
+                            DateTimeStyles.None,
+                            out dt))
+                        {
+                            return CultureInfo.GetCultureInfo("pt-BR")
+                                .TextInfo.ToTitleCase(dt.ToString("MMMM/yyyy", new CultureInfo("pt-BR")));
+                        }
+                    }
+                }
+            }
+
+            return Path.GetFileNameWithoutExtension(caminho);
+        }
+
+        private double ProcurarValorAposRotulo(IXLWorksheet ws, string rotulo, int colunasADireita)
+        {
+            string alvo = NormalizarTexto(rotulo);
+            var used = ws.RangeUsed();
+            if (used == null) return 0;
+
+            foreach (var c in used.Cells())
+            {
+                string txt = NormalizarTexto(c.GetFormattedString());
+                if (!txt.Contains(alvo)) continue;
+
+                for (int i = 1; i <= colunasADireita; i++)
+                {
+                    var n = LerNumero(c.CellRight(i));
+                    if (n.HasValue) return n.Value;
+                }
+            }
+
+            return 0;
+        }
+
+        private double ProcurarPrimeiroTotal(IXLWorksheet ws, int colRotulo, int colValor, int limiteLinhas)
+        {
+            int max = Math.Min(limiteLinhas, ws.LastRowUsed()?.RowNumber() ?? limiteLinhas);
+
+            for (int r = 1; r <= max; r++)
+            {
+                string txt = NormalizarTexto(ws.Cell(r, colRotulo).GetFormattedString());
+                if (txt == "total" || txt.StartsWith("total "))
+                {
+                    var v = LerNumero(ws.Cell(r, colValor));
+                    if (v.HasValue) return v.Value;
+                }
+            }
+
+            return 0;
+        }
+
+        private double ProcurarUltimoTotal(IXLWorksheet ws)
+        {
+            double ultimo = 0;
+            var used = ws.RangeUsed();
+            if (used == null) return 0;
+
+            int totalColunas = used.ColumnCount();
+
+            foreach (var row in used.Rows())
+            {
+                for (int c = 1; c <= Math.Min(3, totalColunas); c++)
+                {
+                    var cell = row.Cell(c);
+                    string txt = NormalizarTexto(cell.GetFormattedString());
+
+                    if (txt.StartsWith("total"))
+                    {
+                        for (int x = c + 1; x <= Math.Min(c + 2, totalColunas); x++)
+                        {
+                            var v = LerNumero(row.Cell(x));
+                            if (v.HasValue)
+                            {
+                                ultimo = v.Value;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return ultimo;
+        }
+
+        private Dictionary<string, double> LerListaNomeValor(IXLWorksheet ws, bool pararEmTotal)
+        {
+            var dict = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            int ultima = ws.LastRowUsed()?.RowNumber() ?? 0;
+
+            for (int r = 1; r <= ultima; r++)
+            {
+                string nome = ws.Cell(r, 1).GetFormattedString().Trim();
+                if (string.IsNullOrWhiteSpace(nome)) continue;
+
+                string norm = NormalizarTexto(nome);
+
+                if (pararEmTotal && norm.StartsWith("total"))
+                    break;
+
+                if (norm.Contains("atendimentos finalizados"))
+                    continue;
+
+                var valor = LerNumero(ws.Cell(r, 2));
+                if (!valor.HasValue) continue;
+
+                string chave = NormalizarNome(nome);
+                if (!dict.ContainsKey(chave))
+                    dict[chave] = valor.Value;
+            }
+
+            return dict;
+        }
+
+        private Dictionary<string, double> LerMotivosPrincipais(IXLWorksheet ws)
+        {
+            var dict = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            bool iniciou = false;
+            int ultima = ws.LastRowUsed()?.RowNumber() ?? 0;
+
+            for (int r = 1; r <= ultima; r++)
+            {
+                string desc = ws.Cell(r, 1).GetFormattedString().Trim();
+                string norm = NormalizarTexto(desc);
+
+                if (norm == "motivo")
+                {
+                    iniciou = true;
+                    continue;
+                }
+
+                if (!iniciou) continue;
+                if (norm.StartsWith("total")) break;
+
+                var v = LerNumero(ws.Cell(r, 2));
+                if (!v.HasValue || string.IsNullOrWhiteSpace(desc)) continue;
+
+                dict[desc] = v.Value;
+            }
+
+            return dict;
+        }
+
+        private double ProcurarValorNaSecao(IXLWorksheet ws, string secao, string item)
+        {
+            bool dentro = false;
+            string secaoNorm = NormalizarTexto(secao);
+            string itemNorm = NormalizarTexto(item);
+            int ultima = ws.LastRowUsed()?.RowNumber() ?? 0;
+
+            for (int r = 1; r <= ultima; r++)
+            {
+                string a = NormalizarTexto(ws.Cell(r, 1).GetFormattedString());
+
+                if (a.Contains(secaoNorm))
+                {
+                    dentro = true;
+                    continue;
+                }
+
+                if (!dentro) continue;
+
+                if (a.StartsWith("total"))
+                    break;
+
+                if (a == itemNorm)
+                {
+                    var v = LerNumero(ws.Cell(r, 2));
+                    return v ?? 0;
+                }
+            }
+
+            return 0;
+        }
+
+        private double ProcurarPorInicioDeTexto(IXLWorksheet ws, IEnumerable<string> rotulos)
+        {
+            var alvos = rotulos.Select(NormalizarTexto).ToList();
+            int ultima = ws.LastRowUsed()?.RowNumber() ?? 0;
+
+            for (int r = 1; r <= ultima; r++)
+            {
+                string txt = NormalizarTexto(ws.Cell(r, 1).GetFormattedString());
+                if (alvos.Any(x => txt.StartsWith(x)))
+                {
+                    var v = LerNumero(ws.Cell(r, 2));
+                    if (v.HasValue) return v.Value;
+                }
+            }
+
+            return 0;
+        }
+
+        private Dictionary<string, double> LerMarketing(IXLWorksheet ws)
+        {
+            var dict = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            int ultima = ws.LastRowUsed()?.RowNumber() ?? 0;
+
+            for (int r = 1; r <= ultima; r++)
+            {
+                string criativo = ws.Cell(r, 2).GetFormattedString().Trim();
+                if (string.IsNullOrWhiteSpace(criativo)) continue;
+
+                string norm = NormalizarTexto(criativo);
+                if (norm == "marketing" || norm == "criativos")
+                    continue;
+
+                var v = LerNumero(ws.Cell(r, 3));
+                if (!v.HasValue) continue;
+
+                dict[criativo] = v.Value;
+            }
+
+            return dict;
+        }
+
+        private Dictionary<string, TimeSpan?> LerNomeTempo(IXLWorksheet ws)
+        {
+            var dict = new Dictionary<string, TimeSpan?>(StringComparer.OrdinalIgnoreCase);
+            int ultima = ws.LastRowUsed()?.RowNumber() ?? 0;
+
+            // A/B contém a lista completa; D/E é apenas uma separação por unidade.
+            for (int r = 1; r <= ultima; r++)
+            {
+                string nome = ws.Cell(r, 1).GetFormattedString().Trim();
+                if (string.IsNullOrWhiteSpace(nome)) continue;
+
+                string norm = NormalizarTexto(nome);
+                if (norm.StartsWith("agente")) continue;
+
+                string tempoTxt = ws.Cell(r, 2).GetFormattedString().Trim();
+                TimeSpan? tempo = ParseTempo(tempoTxt);
+
+                string chave = NormalizarNome(nome);
+                if (!dict.ContainsKey(chave))
+                    dict[chave] = tempo;
+            }
+
+            return dict;
+        }
+
+        private Dictionary<string, double> LerNotas(IXLWorksheet ws)
+        {
+            var dict = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            int ultima = ws.LastRowUsed()?.RowNumber() ?? 0;
+
+            for (int r = 1; r <= ultima; r++)
+            {
+                string nome = ws.Cell(r, 1).GetFormattedString().Trim();
+                string norm = NormalizarTexto(nome);
+
+                if (string.IsNullOrWhiteSpace(nome)) continue;
+                if (norm.StartsWith("atendentes wl") ||
+                    norm.StartsWith("atendentes gu") ||
+                    norm.StartsWith("media unidade") ||
+                    norm.StartsWith("nota") ||
+                    norm.StartsWith("total"))
+                    continue;
+
+                var nota = LerNumero(ws.Cell(r, 2));
+
+                if (!nota.HasValue)
+                    continue;
+
+                // Corrige casos em que "4.88" é interpretado como 488,
+                // "4.93" como 493 etc.
+                double notaCorrigida = AjustarNota(nota.Value);
+
+                if (notaCorrigida < 0 || notaCorrigida > 5)
+                    continue;
+
+                // Só aceita nomes que parecem atendentes.
+                if (!(nome.Contains("-") ||
+                      nome.Contains("W. Luiz", StringComparison.OrdinalIgnoreCase) ||
+                      nome.Contains("Gurgel", StringComparison.OrdinalIgnoreCase) ||
+                      nome.Contains("Maria Angela", StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                string chave = NormalizarNome(nome);
+
+                if (!dict.ContainsKey(chave))
+                    dict[chave] = notaCorrigida;
+            }
+
+            return dict;
+        }
+
+        private double ProcurarValorAoLado(IXLWorksheet ws, string rotulo)
+        {
+            string alvo = NormalizarTexto(rotulo);
+            var used = ws.RangeUsed();
+            if (used == null) return 0;
+
+            foreach (var c in used.Cells())
+            {
+                if (NormalizarTexto(c.GetFormattedString()).Contains(alvo))
+                {
+                    var v = LerNumero(c.CellRight());
+                    if (v.HasValue) return v.Value;
+                }
+            }
+
+            return 0;
+        }
+
+        private double ProcurarNotaUnidade(IXLWorksheet ws, string unidade)
+        {
+            string alvo = NormalizarTexto(unidade);
+            var used = ws.RangeUsed();
+            if (used == null) return 0;
+
+            int totalColunas = used.ColumnCount();
+
+            foreach (var row in used.Rows())
+            {
+                for (int c = 1; c <= totalColunas - 1; c++)
+                {
+                    string txt = NormalizarTexto(row.Cell(c).GetFormattedString());
+                    if (txt == alvo)
+                    {
+                        var v = LerNumero(row.Cell(c + 1));
+                        if (v.HasValue && v.Value >= 0 && v.Value <= 5)
+                            return v.Value;
+                    }
+                }
+            }
+
+            return 0;
+        }
+
+        private double? LerNumero(IXLCell cell)
+        {
+            if (cell == null || cell.IsEmpty())
                 return null;
 
-            foreach (IXLCell cell in used.CellsUsed())
-            {
-                if (cell.TryGetValue<DateTime>(out DateTime dt) && dt.Year >= 2020 && dt.Year <= 2100)
-                    return dt;
+            if (cell.TryGetValue<double>(out var d))
+                return d;
 
-                string texto = cell.GetFormattedString().Trim();
-                if (DateTime.TryParse(texto, PtBr, DateTimeStyles.None, out dt) && dt.Year >= 2020 && dt.Year <= 2100)
-                    return dt;
+            string txt = cell.GetFormattedString()
+                .Replace("R$", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("%", "")
+                .Trim();
+
+            // Algumas notas das planilhas estão gravadas como texto "4.85".
+            // Se houver somente ponto, trata primeiro como decimal no padrão Invariant.
+            if (txt.Contains(".") && !txt.Contains(","))
+            {
+                if (double.TryParse(txt, NumberStyles.Any, CultureInfo.InvariantCulture, out d))
+                    return d;
+
+                if (double.TryParse(txt, NumberStyles.Any, new CultureInfo("pt-BR"), out d))
+                    return d;
+            }
+            else
+            {
+                if (double.TryParse(txt, NumberStyles.Any, new CultureInfo("pt-BR"), out d))
+                    return d;
+
+                if (double.TryParse(txt, NumberStyles.Any, CultureInfo.InvariantCulture, out d))
+                    return d;
             }
 
             return null;
         }
 
-        private static List<int> LerTotaisMes(IXLWorksheet ws)
+        private double AjustarNota(double nota)
         {
-            List<(int row, int col, int valor)> encontrados =
-                new List<(int row, int col, int valor)>();
+            // Defesa contra valores textuais como 4.85 interpretados como 485.
+            while (nota > 5 && nota <= 5000)
+                nota /= 10.0;
 
-            IXLRange? used = ws.RangeUsed();
-
-            if (used == null)
-                return new List<int>();
-
-            foreach (IXLCell cell in used.CellsUsed())
-            {
-                string texto = Normalizar(cell.GetFormattedString());
-
-                if (!texto.Contains("total mes"))
-                    continue;
-
-                int row = cell.Address.RowNumber;
-                int col = cell.Address.ColumnNumber;
-                int? valor = LerInteiro(ws.Cell(row, col + 1));
-
-                if (valor.HasValue)
-                    encontrados.Add((row, col, valor.Value));
-            }
-
-            return encontrados
-                .OrderBy(x => x.row)
-                .ThenBy(x => x.col)
-                .Select(x => x.valor)
-                .ToList();
+            return nota;
         }
 
-        private static int LerPrimeiroTotalColunaAB(IXLWorksheet ws)
+        private TimeSpan? ParseTempo(string valor)
         {
-            IXLRange? used = ws.RangeUsed();
-            if (used == null)
-                return 0;
+            if (string.IsNullOrWhiteSpace(valor))
+                return null;
 
-            foreach (IXLRangeRow row in used.RowsUsed())
+            valor = valor.Trim();
+
+            // Ex.: 2d 1:41:9
+            if (valor.Contains("d ", StringComparison.OrdinalIgnoreCase))
             {
-                string label = Normalizar(row.Cell(1).GetFormattedString());
-                if (label == "total" || label.StartsWith("total "))
+                var partes = valor.Split('d', 2);
+                if (int.TryParse(partes[0].Trim(), out int dias) &&
+                    TimeSpan.TryParse(partes[1].Trim(), out var resto))
+                    return TimeSpan.FromDays(dias) + resto;
+            }
+
+            if (TimeSpan.TryParse(valor, new CultureInfo("pt-BR"), out var ts))
+                return ts;
+
+            if (TimeSpan.TryParse(valor, CultureInfo.InvariantCulture, out ts))
+                return ts;
+
+            return null;
+        }
+
+        // ============================================================
+        // RESUMOS AUTOMÁTICOS
+        // ============================================================
+        private string GerarResumoCurto()
+        {
+            var linhas = new List<string>();
+
+            // =====================================================
+            // VOLUME GERAL
+            // =====================================================
+            double variacaoConversas =
+                CalcularPercentual(
+                    dadosAnterior.Conversas,
+                    dadosAtual.Conversas);
+
+            double variacaoFinalizados =
+                CalcularPercentual(
+                    dadosAnterior.Finalizados,
+                    dadosAtual.Finalizados);
+
+            linhas.Add(
+                variacaoConversas >= 0
+                    ? $"• Conversas: aumentaram {Math.Abs(variacaoConversas):N1}% " +
+                      $"({dadosAnterior.Conversas:N0} → {dadosAtual.Conversas:N0})."
+                    : $"• Conversas: diminuíram {Math.Abs(variacaoConversas):N1}% " +
+                      $"({dadosAnterior.Conversas:N0} → {dadosAtual.Conversas:N0}).");
+
+            linhas.Add(
+                variacaoFinalizados >= 0
+                    ? $"• Finalizados: aumentaram {Math.Abs(variacaoFinalizados):N1}% " +
+                      $"({dadosAnterior.Finalizados:N0} → {dadosAtual.Finalizados:N0})."
+                    : $"• Finalizados: diminuíram {Math.Abs(variacaoFinalizados):N1}% " +
+                      $"({dadosAnterior.Finalizados:N0} → {dadosAtual.Finalizados:N0}).");
+
+            // Taxa de finalização
+            if (dadosAnterior.Conversas > 0 &&
+                dadosAtual.Conversas > 0)
+            {
+                double taxaAnterior =
+                    dadosAnterior.Finalizados /
+                    dadosAnterior.Conversas *
+                    100.0;
+
+                double taxaAtual =
+                    dadosAtual.Finalizados /
+                    dadosAtual.Conversas *
+                    100.0;
+
+                double diferencaPp =
+                    taxaAtual - taxaAnterior;
+
+                string leituraTaxa =
+                    diferencaPp > 0.05
+                        ? "melhorou"
+                        : diferencaPp < -0.05
+                            ? "caiu"
+                            : "ficou estável";
+
+                linhas.Add(
+                    $"• Taxa de finalização: {leituraTaxa} " +
+                    $"({taxaAnterior:N1}% → {taxaAtual:N1}%; " +
+                    $"{diferencaPp:+0.0;-0.0;0.0} p.p.).");
+            }
+
+            // =====================================================
+            // CONTATOS / MARKETING
+            // =====================================================
+            double variacaoNovos =
+                CalcularPercentual(
+                    dadosAnterior.NovosContatos,
+                    dadosAtual.NovosContatos);
+
+            linhas.Add(
+                variacaoNovos >= 0
+                    ? $"• Novos contatos: aumentaram {Math.Abs(variacaoNovos):N1}% " +
+                      $"({dadosAnterior.NovosContatos:N0} → {dadosAtual.NovosContatos:N0})."
+                    : $"• Novos contatos: diminuíram {Math.Abs(variacaoNovos):N1}% " +
+                      $"({dadosAnterior.NovosContatos:N0} → {dadosAtual.NovosContatos:N0}).");
+
+            if (dadosAnterior.MarketingTotal > 0 ||
+                dadosAtual.MarketingTotal > 0)
+            {
+                double variacaoMarketing =
+                    CalcularPercentual(
+                        dadosAnterior.MarketingTotal,
+                        dadosAtual.MarketingTotal);
+
+                linhas.Add(
+                    variacaoMarketing >= 0
+                        ? $"• Marketing: contatos aumentaram {Math.Abs(variacaoMarketing):N1}% " +
+                          $"({dadosAnterior.MarketingTotal:N0} → {dadosAtual.MarketingTotal:N0})."
+                        : $"• Marketing: contatos diminuíram {Math.Abs(variacaoMarketing):N1}% " +
+                          $"({dadosAnterior.MarketingTotal:N0} → {dadosAtual.MarketingTotal:N0}).");
+            }
+
+            // =====================================================
+            // PONTOS DE ATENÇÃO
+            // =====================================================
+            if (dadosAnterior.Reagendamentos > 0 ||
+                dadosAtual.Reagendamentos > 0)
+            {
+                double variacaoReag =
+                    CalcularPercentual(
+                        dadosAnterior.Reagendamentos,
+                        dadosAtual.Reagendamentos);
+
+                linhas.Add(
+                    variacaoReag >= 0
+                        ? $"• Reagendamentos: aumentaram {Math.Abs(variacaoReag):N1}% " +
+                          $"({dadosAnterior.Reagendamentos:N0} → {dadosAtual.Reagendamentos:N0})."
+                        : $"• Reagendamentos: diminuíram {Math.Abs(variacaoReag):N1}% " +
+                          $"({dadosAnterior.Reagendamentos:N0} → {dadosAtual.Reagendamentos:N0}).");
+            }
+
+            if (dadosAnterior.Inatividade > 0 ||
+                dadosAtual.Inatividade > 0)
+            {
+                double variacaoInat =
+                    CalcularPercentual(
+                        dadosAnterior.Inatividade,
+                        dadosAtual.Inatividade);
+
+                linhas.Add(
+                    variacaoInat >= 0
+                        ? $"• Inatividade: aumentou {Math.Abs(variacaoInat):N1}% " +
+                          $"({dadosAnterior.Inatividade:N0} → {dadosAtual.Inatividade:N0})."
+                        : $"• Inatividade: diminuiu {Math.Abs(variacaoInat):N1}% " +
+                          $"({dadosAnterior.Inatividade:N0} → {dadosAtual.Inatividade:N0}).");
+            }
+
+            if (dadosAnterior.OrcamentoFormula > 0 ||
+                dadosAtual.OrcamentoFormula > 0)
+            {
+                double variacaoOrc =
+                    CalcularPercentual(
+                        dadosAnterior.OrcamentoFormula,
+                        dadosAtual.OrcamentoFormula);
+
+                linhas.Add(
+                    variacaoOrc >= 0
+                        ? $"• Orçamentos de fórmula: aumentaram {Math.Abs(variacaoOrc):N1}% " +
+                          $"({dadosAnterior.OrcamentoFormula:N0} → {dadosAtual.OrcamentoFormula:N0})."
+                        : $"• Orçamentos de fórmula: diminuíram {Math.Abs(variacaoOrc):N1}% " +
+                          $"({dadosAnterior.OrcamentoFormula:N0} → {dadosAtual.OrcamentoFormula:N0}).");
+            }
+
+            // =====================================================
+            // EQUIPE - RESUMO EM QUANTIDADE
+            // =====================================================
+            var mudancasTmr =
+                CompararTempos(
+                    dadosAnterior.TMR,
+                    dadosAtual.TMR,
+                    60);
+
+            int tmrPioraram =
+                mudancasTmr.Count(x => x.DiferencaSegundos > 0);
+
+            int tmrMelhoraram =
+                mudancasTmr.Count(x => x.DiferencaSegundos < 0);
+
+            if (mudancasTmr.Count > 0)
+            {
+                linhas.Add(
+                    $"• TMR da equipe: {tmrMelhoraram} melhoraram e " +
+                    $"{tmrPioraram} pioraram.");
+            }
+
+            var mudancasTme =
+                CompararTempos(
+                    dadosAnterior.TME,
+                    dadosAtual.TME,
+                    60);
+
+            int tmePioraram =
+                mudancasTme.Count(x => x.DiferencaSegundos > 0);
+
+            int tmeMelhoraram =
+                mudancasTme.Count(x => x.DiferencaSegundos < 0);
+
+            if (mudancasTme.Count > 0)
+            {
+                linhas.Add(
+                    $"• TME da equipe: {tmeMelhoraram} melhoraram e " +
+                    $"{tmePioraram} pioraram.");
+            }
+
+            var mudancasNotas =
+                CompararNotas(
+                    dadosAnterior.Notas,
+                    dadosAtual.Notas);
+
+            int notasMelhoraram =
+                mudancasNotas.Count(x => x.Diferenca >= 0.03);
+
+            int notasPioraram =
+                mudancasNotas.Count(x => x.Diferenca <= -0.03);
+
+            int notasEstaveis =
+                mudancasNotas.Count -
+                notasMelhoraram -
+                notasPioraram;
+
+            if (mudancasNotas.Count > 0)
+            {
+                linhas.Add(
+                    $"• Notas individuais: {notasMelhoraram} melhoraram, " +
+                    $"{notasPioraram} pioraram e {notasEstaveis} ficaram estáveis.");
+            }
+
+            // =====================================================
+            // NOTA GERAL
+            // =====================================================
+            if (dadosAnterior.NotaGeral > 0 &&
+                dadosAtual.NotaGeral > 0)
+            {
+                double diferencaNota =
+                    dadosAtual.NotaGeral -
+                    dadosAnterior.NotaGeral;
+
+                string leituraNota =
+                    diferencaNota >= 0.03
+                        ? "melhorou"
+                        : diferencaNota <= -0.03
+                            ? "caiu"
+                            : "ficou estável";
+
+                linhas.Add(
+                    $"• Nota geral: {leituraNota} " +
+                    $"({dadosAnterior.NotaGeral:N2} → {dadosAtual.NotaGeral:N2}).");
+            }
+
+            // =====================================================
+            // LEITURA GERENCIAL CURTA
+            // =====================================================
+            if (variacaoConversas > variacaoFinalizados + 1.0)
+            {
+                linhas.Add(
+                    "• Atenção: a demanda cresceu mais do que os atendimentos finalizados.");
+            }
+
+            return string.Join(
+                Environment.NewLine,
+                linhas);
+        }
+
+        private string GerarLeituraAtendente(
+            double ant,
+            double atual,
+            TimeSpan? tmrAnt,
+            TimeSpan? tmrAt,
+            TimeSpan? tmeAnt,
+            TimeSpan? tmeAt,
+            double notaAnt,
+            double notaAt)
+        {
+            var partes = new List<string>();
+
+            // =====================================================
+            // ATENDIMENTOS
+            // =====================================================
+            double pct = CalcularPercentual(ant, atual);
+
+            if (ant == 0 && atual == 0)
+            {
+                partes.Add("atendimentos estáveis");
+            }
+            else if (pct >= 5)
+            {
+                partes.Add("atendimentos aumentaram");
+            }
+            else if (pct <= -5)
+            {
+                partes.Add("atendimentos diminuíram");
+            }
+            else
+            {
+                partes.Add("atendimentos estáveis");
+            }
+
+            // =====================================================
+            // TMR
+            // Menor tempo = melhora.
+            // Diferenças menores que 1 minuto são tratadas como estáveis.
+            // =====================================================
+            if (tmrAnt.HasValue && tmrAt.HasValue)
+            {
+                double diferencaTmrSegundos =
+                    (tmrAt.Value - tmrAnt.Value).TotalSeconds;
+
+                if (diferencaTmrSegundos >= 60)
+                    partes.Add("TMR piorou");
+                else if (diferencaTmrSegundos <= -60)
+                    partes.Add("TMR melhorou");
+                else
+                    partes.Add("TMR estável");
+            }
+            else
+            {
+                partes.Add("TMR sem comparação");
+            }
+
+            // =====================================================
+            // TME
+            // Menor tempo = melhora.
+            // Diferenças menores que 1 minuto são tratadas como estáveis.
+            // =====================================================
+            if (tmeAnt.HasValue && tmeAt.HasValue)
+            {
+                double diferencaTmeSegundos =
+                    (tmeAt.Value - tmeAnt.Value).TotalSeconds;
+
+                if (diferencaTmeSegundos >= 60)
+                    partes.Add("TME piorou");
+                else if (diferencaTmeSegundos <= -60)
+                    partes.Add("TME melhorou");
+                else
+                    partes.Add("TME estável");
+            }
+            else
+            {
+                partes.Add("TME sem comparação");
+            }
+
+            // =====================================================
+            // NOTA
+            // =====================================================
+            if (notaAnt > 0 && notaAt > 0)
+            {
+                double diferencaNota = notaAt - notaAnt;
+
+                if (diferencaNota >= 0.03)
+                    partes.Add("nota melhorou");
+                else if (diferencaNota <= -0.03)
+                    partes.Add("nota piorou");
+                else
+                    partes.Add("nota estável");
+            }
+            else
+            {
+                partes.Add("nota sem comparação");
+            }
+
+            return string.Join(" / ", partes);
+        }
+
+        private List<string> GerarAlertasQualidade()
+        {
+            var alertas = new List<string>();
+
+            if (dadosAnterior.TMA.Count > 0 && dadosAtual.TMA.Values.Count(x => x.HasValue) == 0)
+                alertas.Add($"TMA existe em {dadosAnterior.Periodo}, mas está vazio em {dadosAtual.Periodo}.");
+
+            if (dadosAtual.OrcamentoFormula > 0 &&
+                dadosAtual.OrcamentoFormulaPossivelVenda > 0 &&
+                Math.Abs(dadosAtual.OrcamentoFormula - dadosAtual.OrcamentoFormulaPossivelVenda) > 0.01)
+            {
+                alertas.Add(
+                    $"\"Orçamento de fórmula\" aparece com dois valores em {dadosAtual.Periodo}: " +
+                    $"{dadosAtual.OrcamentoFormula:N0} e {dadosAtual.OrcamentoFormulaPossivelVenda:N0}.");
+            }
+
+            if (dadosAtual.Finalizados > 0 && dadosAtual.Conversas > 0)
+            {
+                double taxa = dadosAtual.Finalizados / dadosAtual.Conversas * 100.0;
+                if (taxa > 100)
+                    alertas.Add("A quantidade de finalizados é maior que a quantidade de conversas. Verifique os totais.");
+            }
+
+            if (dadosAtual.NotaGeral == 0)
+                alertas.Add("Não foi possível localizar a nota média geral do mês passado.");
+
+            if (dadosAtual.TMR.Count == 0)
+                alertas.Add("Não foi possível localizar os dados de TMR.");
+
+            return alertas;
+        }
+
+        // ============================================================
+        // EXPORTAR PDF
+        // ============================================================
+        // IMPORTANTE:
+        // O PDF NÃO é uma captura da tela.
+        // Ele é desenhado a partir dos dados carregados nas planilhas.
+        // Por isso, tabelas e resumos podem continuar em novas páginas
+        // e nenhuma informação fica escondida por scroll.
+        private void ExportarTelasParaPdf(string opcao)
+        {
+            if (!comparacaoRealizada)
+            {
+                MessageBox.Show(
+                    "Primeiro importe os dois arquivos e clique em COMPARAR.",
+                    "Exportar PDF",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                return;
+            }
+
+            string[] telas =
+                opcao == "Todos"
+                    ? new[]
+                    {
+                        "Comparativo",
+                        "Atendentes",
+                        "Motivos",
+                        "Marketing"
+                    }
+                    : new[] { opcao };
+
+            using var sfd = new SaveFileDialog
+            {
+                Title = "Salvar relatório em PDF",
+                Filter = "Arquivo PDF (*.pdf)|*.pdf",
+                DefaultExt = "pdf",
+                AddExtension = true,
+                FileName =
+                    $"Relatorio_Atendimento_" +
+                    $"{dadosAnterior.Periodo.Replace("/", "-")}_" +
+                    $"{dadosAtual.Periodo.Replace("/", "-")}.pdf"
+            };
+
+            if (sfd.ShowDialog() != DialogResult.OK)
+                return;
+
+            try
+            {
+                Cursor = Cursors.WaitCursor;
+
+                List<PaginaRelatorioPdf> paginas =
+                    MontarPaginasRelatorioPdf(telas);
+
+                ImprimirRelatorioPdf(
+                    paginas,
+                    sfd.FileName);
+
+                MessageBox.Show(
+                    "PDF gerado com sucesso.\n\n" +
+                    "Todas as informações foram exportadas, " +
+                    "inclusive os conteúdos que na tela precisam de scroll.",
+                    "Exportar PDF",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "Não foi possível gerar o PDF.\n\n" +
+                    "Detalhe: " + ex.Message,
+                    "Exportar PDF",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            finally
+            {
+                Cursor = Cursors.Default;
+            }
+        }
+
+        private List<PaginaRelatorioPdf> MontarPaginasRelatorioPdf(
+            string[] telas)
+        {
+            var paginas =
+                new List<PaginaRelatorioPdf>();
+
+            foreach (string tela in telas)
+            {
+                switch (tela)
                 {
-                    int? valor = LerInteiro(row.Cell(2));
-                    if (valor.HasValue)
-                        return valor.Value;
-                }
-            }
+                    case "Comparativo":
+                        // Duas páginas para manter o visual limpo
+                        // e trazer todo o resumo sem cortes.
+                        paginas.Add(
+                            new PaginaRelatorioPdf
+                            {
+                                Tipo = "Comparativo1"
+                            });
 
-            return 0;
-        }
-
-        private static int LerTotalMarketing(IXLWorksheet ws)
-        {
-            IXLRange? used = ws.RangeUsed();
-            if (used == null)
-                return 0;
-
-            foreach (IXLRangeRow row in used.RowsUsed())
-            {
-                string label = Normalizar(row.Cell(1).GetFormattedString());
-                if (!label.StartsWith("total"))
-                    continue;
-
-                int? valor = LerInteiro(row.Cell(3));
-                if (valor.HasValue)
-                    return valor.Value;
-            }
-
-            return 0;
-        }
-
-        private static Dictionary<string, int> LerCriativosMarketing(IXLWorksheet ws)
-        {
-            Dictionary<string, int> itens =
-                new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-            IXLRange? used = ws.RangeUsed();
-
-            if (used == null)
-                return itens;
-
-            bool iniciou = false;
-
-            foreach (IXLRangeRow row in used.RowsUsed())
-            {
-                string colB =
-                    row.Cell(2).GetFormattedString().Trim();
-
-                string normB =
-                    Normalizar(colB);
-
-                string normA =
-                    Normalizar(
-                        row.Cell(1).GetFormattedString());
-
-                if (!iniciou)
-                {
-                    if (normB == "criativos")
-                        iniciou = true;
-
-                    continue;
-                }
-
-                if (normA.StartsWith("total"))
-                    break;
-
-                if (string.IsNullOrWhiteSpace(colB))
-                    continue;
-
-                int? valor =
-                    LerInteiro(row.Cell(3));
-
-                if (valor.HasValue)
-                    itens[colB] = valor.Value;
-            }
-
-            return itens;
-        }
-
-        private static int LerValorPorLabel(IXLWorksheet ws, string trecho)
-        {
-            string procurado = Normalizar(trecho);
-            IXLRange? used = ws.RangeUsed();
-
-            if (used == null)
-                return 0;
-
-            foreach (IXLRangeRow row in used.RowsUsed())
-            {
-                string label = Normalizar(row.Cell(1).GetFormattedString());
-
-                if (!label.Contains(procurado))
-                    continue;
-
-                int? valor = LerInteiro(row.Cell(2));
-                if (valor.HasValue)
-                    return valor.Value;
-            }
-
-            return 0;
-        }
-
-        private static Dictionary<string, int> LerTabelaMotivosPrincipal(IXLWorksheet ws)
-        {
-            Dictionary<string, int> dados = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            IXLRange? used = ws.RangeUsed();
-
-            if (used == null)
-                return dados;
-
-            bool iniciou = false;
-
-            foreach (IXLRangeRow row in used.RowsUsed())
-            {
-                string nome = row.Cell(1).GetFormattedString().Trim();
-                string norm = Normalizar(nome);
-
-                if (!iniciou)
-                {
-                    if (norm == "motivo")
-                        iniciou = true;
-                    continue;
-                }
-
-                if (norm.StartsWith("total"))
-                    break;
-
-                int? valor = LerInteiro(row.Cell(2));
-                if (!string.IsNullOrWhiteSpace(nome) && valor.HasValue)
-                    dados[nome] = valor.Value;
-            }
-
-            return dados;
-        }
-
-        private static Dictionary<string, int> LerSecaoMotivos(IXLWorksheet ws, string tituloSecao)
-        {
-            Dictionary<string, int> dados = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            IXLRange? used = ws.RangeUsed();
-
-            if (used == null)
-                return dados;
-
-            bool iniciou = false;
-            string alvo = Normalizar(tituloSecao);
-
-            foreach (IXLRangeRow row in used.RowsUsed())
-            {
-                string nome = row.Cell(1).GetFormattedString().Trim();
-                string norm = Normalizar(nome);
-
-                if (!iniciou)
-                {
-                    if (norm.StartsWith(alvo))
-                        iniciou = true;
-                    continue;
-                }
-
-                if (norm.StartsWith("total"))
-                    break;
-
-                int? valor = LerInteiro(row.Cell(2));
-                if (!string.IsNullOrWhiteSpace(nome) && valor.HasValue)
-                    dados[nome] = valor.Value;
-            }
-
-            return dados;
-        }
-
-        private static (int total, Dictionary<string, int> porAtendente) LerFinalizados(IXLWorksheet ws)
-        {
-            Dictionary<string, int> agentes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            int? total = null;
-            IXLRange? used = ws.RangeUsed();
-
-            if (used == null)
-                return (0, agentes);
-
-            foreach (IXLRangeRow row in used.RowsUsed())
-            {
-                string nome = row.Cell(1).GetFormattedString().Trim();
-                string norm = Normalizar(nome);
-                int? valor = LerInteiro(row.Cell(2));
-
-                if (norm.Contains("total geral") && valor.HasValue)
-                {
-                    total = valor.Value;
-                    continue;
-                }
-
-                if (string.IsNullOrWhiteSpace(nome) || !valor.HasValue)
-                    continue;
-
-                if (norm.Contains("atendimentos finalizados") || norm.StartsWith("total"))
-                    continue;
-
-                agentes[nome] = valor.Value;
-            }
-
-            return (total ?? agentes.Values.Sum(), agentes);
-        }
-
-        private static Dictionary<string, TimeSpan> LerTempos(IXLWorksheet ws)
-        {
-            Dictionary<string, TimeSpan> dados = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
-            IXLRange? used = ws.RangeUsed();
-
-            if (used == null)
-                return dados;
-
-            foreach (IXLRangeRow row in used.RowsUsed())
-            {
-                string nome = row.Cell(1).GetFormattedString().Trim();
-                string norm = Normalizar(nome);
-
-                if (string.IsNullOrWhiteSpace(nome) || norm == "agente")
-                    continue;
-
-                TimeSpan? tempo = LerTempo(row.Cell(2));
-                if (tempo.HasValue)
-                    dados[nome] = tempo.Value;
-            }
-
-            return dados;
-        }
-
-        private static Dictionary<string, NotaAtendente> LerNotasAtendentes(IXLWorksheet ws)
-        {
-            Dictionary<string, NotaAtendente> notas = new Dictionary<string, NotaAtendente>(StringComparer.OrdinalIgnoreCase);
-            IXLRange? used = ws.RangeUsed();
-
-            if (used == null)
-                return notas;
-
-            bool iniciou = false;
-
-            foreach (IXLRangeRow row in used.RowsUsed())
-            {
-                string nome = row.Cell(1).GetFormattedString().Trim();
-                string norm = Normalizar(nome);
-
-                if (!iniciou)
-                {
-                    if (norm == "atendentes")
-                        iniciou = true;
-                    continue;
-                }
-
-                if (string.IsNullOrWhiteSpace(nome))
-                {
-                    if (notas.Count > 0)
+                        paginas.Add(
+                            new PaginaRelatorioPdf
+                            {
+                                Tipo = "Comparativo2"
+                            });
                         break;
-                    continue;
+
+                    case "Atendentes":
+                        {
+                            int total =
+                                dadosAnterior.AtendentesFinalizados.Keys
+                                    .Union(
+                                        dadosAtual.AtendentesFinalizados.Keys)
+                                    .Count();
+
+                            const int linhasPorPagina = 20;
+
+                            if (total == 0)
+                            {
+                                paginas.Add(
+                                    new PaginaRelatorioPdf
+                                    {
+                                        Tipo = "Atendentes",
+                                        Inicio = 0,
+                                        Quantidade = 0
+                                    });
+                            }
+                            else
+                            {
+                                for (
+                                    int inicio = 0;
+                                    inicio < total;
+                                    inicio += linhasPorPagina)
+                                {
+                                    paginas.Add(
+                                        new PaginaRelatorioPdf
+                                        {
+                                            Tipo = "Atendentes",
+                                            Inicio = inicio,
+                                            Quantidade =
+                                                Math.Min(
+                                                    linhasPorPagina,
+                                                    total - inicio)
+                                        });
+                                }
+                            }
+
+                            break;
+                        }
+
+                    case "Motivos":
+                        {
+                            int total =
+                                dadosAnterior.Motivos.Keys
+                                    .Union(dadosAtual.Motivos.Keys)
+                                    .Count();
+
+                            const int linhasPorPagina = 22;
+
+                            if (total == 0)
+                            {
+                                paginas.Add(
+                                    new PaginaRelatorioPdf
+                                    {
+                                        Tipo = "Motivos",
+                                        Inicio = 0,
+                                        Quantidade = 0
+                                    });
+                            }
+                            else
+                            {
+                                for (
+                                    int inicio = 0;
+                                    inicio < total;
+                                    inicio += linhasPorPagina)
+                                {
+                                    paginas.Add(
+                                        new PaginaRelatorioPdf
+                                        {
+                                            Tipo = "Motivos",
+                                            Inicio = inicio,
+                                            Quantidade =
+                                                Math.Min(
+                                                    linhasPorPagina,
+                                                    total - inicio)
+                                        });
+                                }
+                            }
+
+                            break;
+                        }
+
+                    case "Marketing":
+                        {
+                            int total =
+                                dadosAnterior.MarketingCriativos.Keys
+                                    .Union(
+                                        dadosAtual.MarketingCriativos.Keys)
+                                    .Count();
+
+                            // A primeira página reserva espaço para os 3 KPIs.
+                            const int primeiraPagina = 15;
+                            const int proximasPaginas = 22;
+
+                            if (total == 0)
+                            {
+                                paginas.Add(
+                                    new PaginaRelatorioPdf
+                                    {
+                                        Tipo = "Marketing",
+                                        Inicio = 0,
+                                        Quantidade = 0,
+                                        PrimeiraPagina = true
+                                    });
+                            }
+                            else
+                            {
+                                int inicio = 0;
+
+                                paginas.Add(
+                                    new PaginaRelatorioPdf
+                                    {
+                                        Tipo = "Marketing",
+                                        Inicio = 0,
+                                        Quantidade =
+                                            Math.Min(
+                                                primeiraPagina,
+                                                total),
+                                        PrimeiraPagina = true
+                                    });
+
+                                inicio += primeiraPagina;
+
+                                while (inicio < total)
+                                {
+                                    paginas.Add(
+                                        new PaginaRelatorioPdf
+                                        {
+                                            Tipo = "Marketing",
+                                            Inicio = inicio,
+                                            Quantidade =
+                                                Math.Min(
+                                                    proximasPaginas,
+                                                    total - inicio),
+                                            PrimeiraPagina = false
+                                        });
+
+                                    inicio += proximasPaginas;
+                                }
+                            }
+
+                            break;
+                        }
+                }
+            }
+
+            return paginas;
+        }
+
+        private void ImprimirRelatorioPdf(
+            List<PaginaRelatorioPdf> paginas,
+            string caminhoPdf)
+        {
+            if (paginas.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    "Nenhuma página foi preparada para o relatório.");
+            }
+
+            string impressoraPdf = "";
+
+            foreach (
+                string impressora
+                in PrinterSettings.InstalledPrinters)
+            {
+                if (impressora.Equals(
+                        "Microsoft Print to PDF",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    impressoraPdf = impressora;
+                    break;
                 }
 
-                if (norm.StartsWith("atendentes wl") || norm.StartsWith("atendentes guergel") || norm.StartsWith("atendentes gurgel"))
+                if (string.IsNullOrWhiteSpace(impressoraPdf) &&
+                    impressora.Contains(
+                        "Print to PDF",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    impressoraPdf = impressora;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(impressoraPdf))
+            {
+                throw new InvalidOperationException(
+                    "A impressora virtual 'Microsoft Print to PDF' " +
+                    "não foi encontrada no Windows.");
+            }
+
+            int indicePagina = 0;
+
+            using var documento =
+                new PrintDocument();
+
+            documento.PrinterSettings.PrinterName =
+                impressoraPdf;
+
+            documento.PrinterSettings.PrintToFile =
+                true;
+
+            documento.PrinterSettings.PrintFileName =
+                caminhoPdf;
+
+            // PDF em A4 RETRATO.
+            documento.DefaultPageSettings.Landscape =
+                false;
+
+            documento.DefaultPageSettings.PaperSize =
+                new PaperSize(
+                    "A4",
+                    827,
+                    1169);
+
+            documento.DefaultPageSettings.Margins =
+                new Margins(
+                    28,
+                    28,
+                    28,
+                    28);
+
+            documento.PrintController =
+                new StandardPrintController();
+
+            documento.PrintPage += (_, e) =>
+            {
+                PaginaRelatorioPdf pagina =
+                    paginas[indicePagina];
+
+                DesenharPaginaRelatorio(
+                    e.Graphics,
+                    e.MarginBounds,
+                    pagina,
+                    indicePagina + 1,
+                    paginas.Count);
+
+                indicePagina++;
+
+                e.HasMorePages =
+                    indicePagina < paginas.Count;
+            };
+
+            documento.Print();
+        }
+
+        private void DesenharPaginaRelatorio(
+            Graphics g,
+            Rectangle area,
+            PaginaRelatorioPdf pagina,
+            int numeroPagina,
+            int totalPaginas)
+        {
+            g.Clear(Color.White);
+
+            switch (pagina.Tipo)
+            {
+                case "Comparativo1":
+                    DesenharComparativoPdfPagina1(
+                        g,
+                        area);
                     break;
 
-                double? media = LerDouble(row.Cell(2));
-                int? votos = LerInteiro(row.Cell(3));
+                case "Comparativo2":
+                    DesenharComparativoPdfPagina2(
+                        g,
+                        area);
+                    break;
 
-                if (media.HasValue)
+                case "Atendentes":
+                    DesenharAtendentesPdf(
+                        g,
+                        area,
+                        pagina.Inicio,
+                        pagina.Quantidade);
+                    break;
+
+                case "Motivos":
+                    DesenharMotivosPdf(
+                        g,
+                        area,
+                        pagina.Inicio,
+                        pagina.Quantidade);
+                    break;
+
+                case "Marketing":
+                    DesenharMarketingPdf(
+                        g,
+                        area,
+                        pagina.Inicio,
+                        pagina.Quantidade,
+                        pagina.PrimeiraPagina);
+                    break;
+            }
+
+            DesenharRodapePdf(
+                g,
+                area,
+                numeroPagina,
+                totalPaginas);
+        }
+
+        private int DesenharCabecalhoPdf(
+            Graphics g,
+            Rectangle area,
+            string titulo,
+            string subtitulo)
+        {
+            using var fonteTitulo =
+                new Font(
+                    "Segoe UI",
+                    16F,
+                    FontStyle.Bold);
+
+            using var fonteSub =
+                new Font(
+                    "Segoe UI",
+                    8.5F);
+
+            using var fontePeriodo =
+                new Font(
+                    "Segoe UI Semibold",
+                    8.5F);
+
+            using var brushTitulo =
+                new SolidBrush(CorTexto);
+
+            using var brushSub =
+                new SolidBrush(CorTextoSecundario);
+
+            g.DrawString(
+                titulo,
+                fonteTitulo,
+                brushTitulo,
+                area.Left,
+                area.Top);
+
+            g.DrawString(
+                subtitulo,
+                fonteSub,
+                brushSub,
+                area.Left,
+                area.Top + 31);
+
+            string periodo =
+                $"{dadosAnterior.Periodo}  x  {dadosAtual.Periodo}";
+
+            SizeF tamPeriodo =
+                g.MeasureString(
+                    periodo,
+                    fontePeriodo);
+
+            g.DrawString(
+                periodo,
+                fontePeriodo,
+                brushTitulo,
+                area.Right -
+                tamPeriodo.Width,
+                area.Top + 8);
+
+            return area.Top + 55;
+        }
+
+        private void DesenharRodapePdf(
+            Graphics g,
+            Rectangle area,
+            int paginaAtual,
+            int totalPaginas)
+        {
+            using var fonte =
+                new Font(
+                    "Segoe UI",
+                    7.5F);
+
+            using var brush =
+                new SolidBrush(
+                    CorTextoSecundario);
+
+            string texto =
+                $"Relatório de Atendimento  •  " +
+                $"{dadosAnterior.Periodo} x {dadosAtual.Periodo}  •  " +
+                $"Página {paginaAtual} de {totalPaginas}";
+
+            g.DrawString(
+                texto,
+                fonte,
+                brush,
+                area.Left,
+                area.Bottom - 12);
+        }
+
+        private void DesenharComparativoPdfPagina1(
+            Graphics g,
+            Rectangle area)
+        {
+            int y =
+                DesenharCabecalhoPdf(
+                    g,
+                    area,
+                    "Relatório de Atendimento - Comparativo Mensal",
+                    "Visão geral dos principais indicadores e tempos da equipe.");
+
+            int espaco = 8;
+            int larguraCard =
+                (area.Width - espaco) / 2;
+
+            // =====================================================
+            // KPIs - 2 x 2 para ficar legível no A4 retrato
+            // =====================================================
+            int alturaKpi = 74;
+
+            double varConversas =
+                CalcularPercentual(
+                    dadosAnterior.Conversas,
+                    dadosAtual.Conversas);
+
+            double varFinalizados =
+                CalcularPercentual(
+                    dadosAnterior.Finalizados,
+                    dadosAtual.Finalizados);
+
+            double varNovos =
+                CalcularPercentual(
+                    dadosAnterior.NovosContatos,
+                    dadosAtual.NovosContatos);
+
+            double difNota =
+                dadosAtual.NotaGeral -
+                dadosAnterior.NotaGeral;
+
+            DesenharKpiPdf(
+                g,
+                new Rectangle(
+                    area.Left,
+                    y,
+                    larguraCard,
+                    alturaKpi),
+                "Conversas",
+                dadosAtual.Conversas.ToString("N0"),
+                $"{FormatarPercentualComSeta(varConversas)}  " +
+                $"(antes {dadosAnterior.Conversas:N0})",
+                varConversas >= 0
+                    ? CorVerde
+                    : CorVermelho);
+
+            DesenharKpiPdf(
+                g,
+                new Rectangle(
+                    area.Left +
+                    larguraCard +
+                    espaco,
+                    y,
+                    larguraCard,
+                    alturaKpi),
+                "Finalizados",
+                dadosAtual.Finalizados.ToString("N0"),
+                $"{FormatarPercentualComSeta(varFinalizados)}  " +
+                $"(antes {dadosAnterior.Finalizados:N0})",
+                varFinalizados >= 0
+                    ? CorVerde
+                    : CorVermelho);
+
+            y += alturaKpi + espaco;
+
+            DesenharKpiPdf(
+                g,
+                new Rectangle(
+                    area.Left,
+                    y,
+                    larguraCard,
+                    alturaKpi),
+                "Novos contatos",
+                dadosAtual.NovosContatos.ToString("N0"),
+                $"{FormatarPercentualComSeta(varNovos)}  " +
+                $"(antes {dadosAnterior.NovosContatos:N0})",
+                varNovos >= 0
+                    ? CorVerde
+                    : CorVermelho);
+
+            DesenharKpiPdf(
+                g,
+                new Rectangle(
+                    area.Left +
+                    larguraCard +
+                    espaco,
+                    y,
+                    larguraCard,
+                    alturaKpi),
+                "Nota geral",
+                dadosAtual.NotaGeral > 0
+                    ? dadosAtual.NotaGeral.ToString("N2")
+                    : "—",
+                $"{(difNota >= 0 ? "▲" : "▼")} " +
+                $"{Math.Abs(difNota):N2}  " +
+                $"(antes {dadosAnterior.NotaGeral:N2})",
+                difNota >= 0
+                    ? CorVerde
+                    : CorVermelho);
+
+            y += alturaKpi + 12;
+
+            // =====================================================
+            // TMR - cards em largura total
+            // =====================================================
+            var mudancasTmr =
+                CompararTempos(
+                    dadosAnterior.TMR,
+                    dadosAtual.TMR,
+                    60);
+
+            string tmrPioraram =
+                JuntarNomes(
+                    mudancasTmr
+                        .Where(
+                            x =>
+                                x.DiferencaSegundos > 0)
+                        .OrderByDescending(
+                            x =>
+                                x.DiferencaSegundos)
+                        .Select(
+                            x =>
+                                NomeCurto(x.Nome))
+                        .ToList());
+
+            string tmrMelhoraram =
+                JuntarNomes(
+                    mudancasTmr
+                        .Where(
+                            x =>
+                                x.DiferencaSegundos < 0)
+                        .OrderBy(
+                            x =>
+                                x.DiferencaSegundos)
+                        .Select(
+                            x =>
+                                NomeCurto(x.Nome))
+                        .ToList());
+
+            int alturaTempo = 112;
+
+            DesenharCardTextoPdf(
+                g,
+                new Rectangle(
+                    area.Left,
+                    y,
+                    area.Width,
+                    alturaTempo),
+                CorVermelhoClaro,
+                CorVermelho,
+                "TMR PIOROU",
+                string.IsNullOrWhiteSpace(tmrPioraram)
+                    ? "Nenhuma piora relevante."
+                    : "Pioraram: " + tmrPioraram + ".",
+                8.1F);
+
+            y += alturaTempo + 8;
+
+            DesenharCardTextoPdf(
+                g,
+                new Rectangle(
+                    area.Left,
+                    y,
+                    area.Width,
+                    alturaTempo),
+                CorVerdeClaro,
+                CorVerde,
+                "TMR MELHOROU",
+                string.IsNullOrWhiteSpace(tmrMelhoraram)
+                    ? "Nenhuma melhora relevante."
+                    : "Melhoraram: " + tmrMelhoraram + ".",
+                8.1F);
+
+            y += alturaTempo + 12;
+
+            // =====================================================
+            // TME - cards em largura total
+            // =====================================================
+            var mudancasTme =
+                CompararTempos(
+                    dadosAnterior.TME,
+                    dadosAtual.TME,
+                    60);
+
+            string tmePioraram =
+                JuntarNomes(
+                    mudancasTme
+                        .Where(
+                            x =>
+                                x.DiferencaSegundos > 0)
+                        .OrderByDescending(
+                            x =>
+                                x.DiferencaSegundos)
+                        .Select(
+                            x =>
+                                NomeCurto(x.Nome))
+                        .ToList());
+
+            string tmeMelhoraram =
+                JuntarNomes(
+                    mudancasTme
+                        .Where(
+                            x =>
+                                x.DiferencaSegundos < 0)
+                        .OrderBy(
+                            x =>
+                                x.DiferencaSegundos)
+                        .Select(
+                            x =>
+                                NomeCurto(x.Nome))
+                        .ToList());
+
+            DesenharCardTextoPdf(
+                g,
+                new Rectangle(
+                    area.Left,
+                    y,
+                    area.Width,
+                    alturaTempo),
+                CorVermelhoClaro,
+                CorVermelho,
+                "TME PIOROU",
+                string.IsNullOrWhiteSpace(tmePioraram)
+                    ? "Nenhuma piora relevante."
+                    : "Pioraram: " + tmePioraram + ".",
+                8.1F);
+
+            y += alturaTempo + 8;
+
+            DesenharCardTextoPdf(
+                g,
+                new Rectangle(
+                    area.Left,
+                    y,
+                    area.Width,
+                    alturaTempo),
+                CorVerdeClaro,
+                CorVerde,
+                "TME MELHOROU",
+                string.IsNullOrWhiteSpace(tmeMelhoraram)
+                    ? "Nenhuma melhora relevante."
+                    : "Melhoraram: " + tmeMelhoraram + ".",
+                8.1F);
+        }
+
+        private void DesenharComparativoPdfPagina2(
+            Graphics g,
+            Rectangle area)
+        {
+            int y =
+                DesenharCabecalhoPdf(
+                    g,
+                    area,
+                    "Comparativo - Equipe e Resumo do Mês",
+                    "Mudanças de volume, notas e leitura gerencial.");
+
+            var atendimentos =
+                CompararNumeros(
+                    dadosAnterior.AtendentesFinalizados,
+                    dadosAtual.AtendentesFinalizados);
+
+            string aumentaram =
+                JuntarNomes(
+                    atendimentos
+                        .Where(
+                            x =>
+                                x.Percentual >= 5)
+                        .OrderByDescending(
+                            x =>
+                                x.Percentual)
+                        .Select(
+                            x =>
+                                NomeCurto(x.Nome))
+                        .ToList());
+
+            string diminuiram =
+                JuntarNomes(
+                    atendimentos
+                        .Where(
+                            x =>
+                                x.Percentual <= -5)
+                        .OrderBy(
+                            x =>
+                                x.Percentual)
+                        .Select(
+                            x =>
+                                NomeCurto(x.Nome))
+                        .ToList());
+
+            string textoAtendimentos =
+                (string.IsNullOrWhiteSpace(aumentaram)
+                    ? ""
+                    : "Aumentaram: " +
+                      aumentaram +
+                      ".") +
+                (string.IsNullOrWhiteSpace(diminuiram)
+                    ? ""
+                    : Environment.NewLine +
+                      "Diminuíram: " +
+                      diminuiram +
+                      ".");
+
+            if (string.IsNullOrWhiteSpace(
+                    textoAtendimentos))
+            {
+                textoAtendimentos =
+                    "Sem mudanças relevantes.";
+            }
+
+            var notas =
+                CompararNotas(
+                    dadosAnterior.Notas,
+                    dadosAtual.Notas);
+
+            string notasMelhoraram =
+                JuntarNomes(
+                    notas
+                        .Where(
+                            x =>
+                                x.Diferenca >= 0.03)
+                        .OrderByDescending(
+                            x =>
+                                x.Diferenca)
+                        .Select(
+                            x =>
+                                NomeCurto(x.Nome))
+                        .ToList());
+
+            string notasPioraram =
+                JuntarNomes(
+                    notas
+                        .Where(
+                            x =>
+                                x.Diferenca <= -0.03)
+                        .OrderBy(
+                            x =>
+                                x.Diferenca)
+                        .Select(
+                            x =>
+                                NomeCurto(x.Nome))
+                        .ToList());
+
+            string textoNotas =
+                (string.IsNullOrWhiteSpace(
+                    notasMelhoraram)
+                    ? ""
+                    : "Melhoraram: " +
+                      notasMelhoraram +
+                      ".") +
+                (string.IsNullOrWhiteSpace(
+                    notasPioraram)
+                    ? ""
+                    : Environment.NewLine +
+                      "Pioraram: " +
+                      notasPioraram +
+                      ".");
+
+            if (string.IsNullOrWhiteSpace(
+                    textoNotas))
+            {
+                textoNotas =
+                    "As notas ficaram estáveis.";
+            }
+
+            int alturaEquipe = 150;
+
+            DesenharCardTextoPdf(
+                g,
+                new Rectangle(
+                    area.Left,
+                    y,
+                    area.Width,
+                    alturaEquipe),
+                CorAzulClaro,
+                CorAzul,
+                "ATENDIMENTOS",
+                textoAtendimentos,
+                8.2F);
+
+            y += alturaEquipe + 10;
+
+            DesenharCardTextoPdf(
+                g,
+                new Rectangle(
+                    area.Left,
+                    y,
+                    area.Width,
+                    alturaEquipe),
+                CorAmareloClaro,
+                CorAmarelo,
+                "NOTAS",
+                textoNotas,
+                8.2F);
+
+            y += alturaEquipe + 12;
+
+            int alturaResumo =
+                area.Bottom -
+                y -
+                25;
+
+            DesenharCardTextoPdf(
+                g,
+                new Rectangle(
+                    area.Left,
+                    y,
+                    area.Width,
+                    Math.Max(
+                        280,
+                        alturaResumo)),
+                Color.White,
+                CorSidebar,
+                "RESUMO DO MÊS",
+                GerarResumoCurto(),
+                8.1F);
+        }
+
+        private void DesenharAtendentesPdf(
+            Graphics g,
+            Rectangle area,
+            int inicio,
+            int quantidade)
+        {
+            int y =
+                DesenharCabecalhoPdf(
+                    g,
+                    area,
+                    "Atendentes",
+                    "Comparação detalhada por atendente.");
+
+            var nomes =
+                dadosAnterior.AtendentesFinalizados.Keys
+                    .Union(
+                        dadosAtual.AtendentesFinalizados.Keys)
+                    .OrderBy(
+                        x =>
+                            NomeCurto(x))
+                    .ToList();
+
+            // Tabela inspirada diretamente no modal do programa.
+            // As larguras foram ajustadas para caber em A4 retrato.
+            var colunas =
+                new[]
                 {
-                    notas[nome] = new NotaAtendente
+                    new ColunaTabelaPdf
                     {
-                        Media = media.Value,
-                        Votos = votos ?? 0
-                    };
-                }
-            }
-
-            return notas;
-        }
-
-        private static double LerMediaGeral(IXLWorksheet ws)
-        {
-            IXLRange? used = ws.RangeUsed();
-            if (used == null)
-                return 0;
-
-            foreach (IXLCell cell in used.CellsUsed())
-            {
-                string texto = Normalizar(cell.GetFormattedString());
-                if (!texto.Contains("media geral"))
-                    continue;
-
-                int row = cell.Address.RowNumber;
-                int col = cell.Address.ColumnNumber;
-
-                for (int offset = 1; offset <= 3; offset++)
-                {
-                    double? valor = LerDouble(ws.Cell(row, col + offset));
-                    if (valor.HasValue)
-                        return valor.Value;
-                }
-            }
-
-            return 0;
-        }
-
-        private static int? LerInteiro(IXLCell cell)
-        {
-            double? d = LerDouble(cell);
-            if (!d.HasValue)
-                return null;
-
-            return Convert.ToInt32(Math.Round(d.Value, MidpointRounding.AwayFromZero));
-        }
-
-        private static double? LerDouble(IXLCell cell)
-        {
-            if (cell.TryGetValue<double>(out double numero))
-                return numero;
-
-            string texto = cell.GetFormattedString().Trim();
-
-            if (double.TryParse(texto, NumberStyles.Any, PtBr, out numero))
-                return numero;
-
-            if (double.TryParse(texto, NumberStyles.Any, CultureInfo.InvariantCulture, out numero))
-                return numero;
-
-            return null;
-        }
-
-        private static TimeSpan? LerTempo(IXLCell cell)
-        {
-            if (cell.TryGetValue<TimeSpan>(out TimeSpan ts))
-                return ts;
-
-            string texto = cell.GetFormattedString().Trim();
-            if (string.IsNullOrWhiteSpace(texto))
-                return null;
-
-            if (TimeSpan.TryParse(texto, CultureInfo.InvariantCulture, out ts) ||
-                TimeSpan.TryParse(texto, PtBr, out ts))
-                return ts;
-
-            Match match = Regex.Match(texto, @"^(?<dias>\d+)d\s+(?<h>\d+):(?<m>\d+):(?<s>\d+)$", RegexOptions.IgnoreCase);
-            if (match.Success)
-            {
-                int dias = int.Parse(match.Groups["dias"].Value);
-                int h = int.Parse(match.Groups["h"].Value);
-                int m = int.Parse(match.Groups["m"].Value);
-                int s = int.Parse(match.Groups["s"].Value);
-                return new TimeSpan(dias, h, m, s);
-            }
-
-            return null;
-        }
-
-        // =========================================================
-        // PREENCHER DASHBOARD
-        // =========================================================
-        private void PreencherDashboard(RelatorioMensal anterior, RelatorioMensal atual)
-        {
-            double taxaAnterior = CalcularTaxa(anterior.Finalizados, anterior.Conversas);
-            double taxaAtual = CalcularTaxa(atual.Finalizados, atual.Conversas);
-
-            AtualizarKpiNumero(kpiConversas, atual.Conversas, anterior.Conversas, anterior.Periodo);
-            AtualizarKpiNumero(kpiFinalizados, atual.Finalizados, anterior.Finalizados, anterior.Periodo);
-            AtualizarKpiPontosPercentuais(kpiTaxaFinalizacao, taxaAtual, taxaAnterior, anterior.Periodo);
-            AtualizarKpiNumero(kpiReagendamentos, atual.Reagendamentos, anterior.Reagendamentos, anterior.Periodo);
-            AtualizarKpiNumero(kpiNovosContatos, atual.NovosContatos, anterior.NovosContatos, anterior.Periodo);
-            AtualizarKpiNota(kpiNotaMedia, atual.NotaMedia, anterior.NotaMedia, anterior.Periodo);
-
-            lblResumoTexto.Text = GerarResumoExecutivo(anterior, atual, taxaAnterior, taxaAtual);
-            lblAlertasTexto.Text = GerarAlertas(anterior, atual, taxaAnterior, taxaAtual);
-            lblOportunidadesTexto.Text = GerarOportunidades(anterior, atual);
-            lblAcoesTexto.Text = GerarAcoes(anterior, atual, taxaAnterior, taxaAtual);
-            lblDestaquesTexto.Text = GerarDestaques(anterior, atual);
-            lblIntegridadeTexto.Text = GerarIntegridade(anterior, atual);
-
-            PreencherGraficoMotivos(anterior, atual);
-            PreencherTabelaAtendentes(anterior, atual);
-        }
-
-        private void AtualizarKpiNumero(KpiView kpi, int atual, int anterior, string periodoAnterior)
-        {
-            kpi.Valor.Text = atual.ToString("N0", PtBr);
-            kpi.Anterior.Text = $"vs. {anterior.ToString("N0", PtBr)} em {periodoAnterior}";
-
-            double? variacao = CalcularVariacaoPercentual(anterior, atual);
-            AplicarVariacao(kpi.Variacao, variacao, "%");
-        }
-
-        private void AtualizarKpiPontosPercentuais(KpiView kpi, double atual, double anterior, string periodoAnterior)
-        {
-            kpi.Valor.Text = atual.ToString("0.0", PtBr) + "%";
-            kpi.Anterior.Text = $"vs. {anterior.ToString("0.0", PtBr)}% em {periodoAnterior}";
-
-            double delta = atual - anterior;
-            string seta = delta > 0.0001 ? "▲" : delta < -0.0001 ? "▼" : "•";
-            kpi.Variacao.Text = $"{seta} {Math.Abs(delta).ToString("0.0", PtBr)} p.p.";
-            kpi.Variacao.ForeColor = delta >= 0 ? CorVerde : CorVermelho;
-        }
-
-        private void AtualizarKpiNota(KpiView kpi, double atual, double anterior, string periodoAnterior)
-        {
-            kpi.Valor.Text = atual > 0 ? atual.ToString("0.00", PtBr) : "—";
-            kpi.Anterior.Text = anterior > 0 ? $"vs. {anterior.ToString("0.00", PtBr)} em {periodoAnterior}" : string.Empty;
-
-            if (atual <= 0 || anterior <= 0)
-            {
-                kpi.Variacao.Text = string.Empty;
-                return;
-            }
-
-            double delta = atual - anterior;
-            string seta = delta > 0.0001 ? "▲" : delta < -0.0001 ? "▼" : "•";
-            kpi.Variacao.Text = $"{seta} {Math.Abs(delta).ToString("0.00", PtBr)}";
-            kpi.Variacao.ForeColor = delta >= 0 ? CorVerde : CorVermelho;
-        }
-
-        private void AplicarVariacao(Label label, double? variacao, string sufixo)
-        {
-            if (!variacao.HasValue)
-            {
-                label.Text = string.Empty;
-                return;
-            }
-
-            double v = variacao.Value;
-            string seta = v > 0.0001 ? "▲" : v < -0.0001 ? "▼" : "•";
-            label.Text = $"{seta} {Math.Abs(v).ToString("0.0", PtBr)}{sufixo}";
-            label.ForeColor = v >= 0 ? CorVerde : CorVermelho;
-        }
-
-        private void PreencherGraficoMotivos(RelatorioMensal anterior, RelatorioMensal atual)
-        {
-            List<string> top = atual.Motivos
-                .OrderByDescending(x => x.Value)
-                .Take(6)
-                .Select(x => x.Key)
-                .ToList();
-
-            graficoMotivos.Categories = top.Select(AbreviarMotivo).ToArray();
-            graficoMotivos.PreviousValues = top.Select(m => anterior.Motivos.TryGetValue(m, out int v) ? (double)v : 0d).ToArray();
-            graficoMotivos.CurrentValues = top.Select(m => atual.Motivos.TryGetValue(m, out int v) ? (double)v : 0d).ToArray();
-            graficoMotivos.PreviousLabel = anterior.Periodo;
-            graficoMotivos.CurrentLabel = atual.Periodo;
-            graficoMotivos.Invalidate();
-        }
-
-        private void PreencherTabelaAtendentes(RelatorioMensal anterior, RelatorioMensal atual)
-        {
-            dgvAtendentes.Rows.Clear();
-            dgvAtendentes.Columns["Anterior"].HeaderText = anterior.Periodo;
-            dgvAtendentes.Columns["Atual"].HeaderText = atual.Periodo;
-
-            HashSet<string> nomes = new HashSet<string>(anterior.FinalizadosPorAtendente.Keys, StringComparer.OrdinalIgnoreCase);
-            nomes.UnionWith(atual.FinalizadosPorAtendente.Keys);
-
-            var linhas = nomes
-                .Select(nome =>
-                {
-                    int ant = anterior.FinalizadosPorAtendente.TryGetValue(nome, out int a) ? a : 0;
-                    int atu = atual.FinalizadosPorAtendente.TryGetValue(nome, out int b) ? b : 0;
-
-                    double? variacao = ant > 0 ? ((atu - ant) / (double)ant) * 100d : null;
-
-                    NotaAtendente? notaAtual = atual.Notas.TryGetValue(nome, out NotaAtendente? nAtual) ? nAtual : null;
-                    NotaAtendente? notaAnterior = anterior.Notas.TryGetValue(nome, out NotaAtendente? nAnterior) ? nAnterior : null;
-
-                    TimeSpan? tmrAtual = atual.TMR.TryGetValue(nome, out TimeSpan ta) ? ta : null;
-                    TimeSpan? tmrAnterior = anterior.TMR.TryGetValue(nome, out TimeSpan tb) ? tb : null;
-
-                    return new
+                        Titulo = "Atendente",
+                        Peso = 1.35F
+                    },
+                    new ColunaTabelaPdf
                     {
-                        Nome = nome,
-                        Anterior = ant,
-                        Atual = atu,
-                        Variacao = variacao,
-                        NotaAtual = notaAtual,
-                        NotaAnterior = notaAnterior,
-                        TmrAtual = tmrAtual,
-                        TmrAnterior = tmrAnterior,
-                        Diagnostico = GerarDiagnosticoAtendente(ant, atu, notaAnterior, notaAtual, tmrAnterior, tmrAtual)
-                    };
-                })
-                .OrderByDescending(x => x.Atual)
-                .ThenBy(x => x.Nome)
-                .ToList();
+                        Titulo = dadosAnterior.Periodo,
+                        Peso = 0.55F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = dadosAtual.Periodo,
+                        Peso = 0.55F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "Variação",
+                        Peso = 0.58F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "TMR ant.",
+                        Peso = 0.64F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "TMR atual",
+                        Peso = 0.64F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "TME ant.",
+                        Peso = 0.64F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "TME atual",
+                        Peso = 0.64F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "Nota ant.",
+                        Peso = 0.50F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "Nota atual",
+                        Peso = 0.50F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "Leitura rápida",
+                        Peso = 2.25F
+                    }
+                };
 
-            foreach (var linha in linhas)
+            int[] larguras =
+                CalcularLargurasTabela(
+                    area.Width,
+                    colunas);
+
+            const int alturaCabecalho = 28;
+            const int alturaLinha = 42;
+
+            y =
+                DesenharCabecalhoTabelaPdfCompacto(
+                    g,
+                    area.Left,
+                    y,
+                    larguras,
+                    colunas,
+                    alturaCabecalho);
+
+            int fim =
+                Math.Min(
+                    inicio + quantidade,
+                    nomes.Count);
+
+            for (
+                int i = inicio;
+                i < fim;
+                i++)
             {
-                string textoVariacao;
+                string chave =
+                    nomes[i];
 
-                if (linha.Anterior == 0 && linha.Atual > 0)
-                    textoVariacao = "Novo";
-                else if (!linha.Variacao.HasValue)
-                    textoVariacao = "—";
+                double ant =
+                    Valor(
+                        dadosAnterior.AtendentesFinalizados,
+                        chave);
+
+                double atual =
+                    Valor(
+                        dadosAtual.AtendentesFinalizados,
+                        chave);
+
+                double pct =
+                    CalcularPercentual(
+                        ant,
+                        atual);
+
+                TimeSpan? tmrAnt =
+                    Tempo(
+                        dadosAnterior.TMR,
+                        chave);
+
+                TimeSpan? tmrAtual =
+                    Tempo(
+                        dadosAtual.TMR,
+                        chave);
+
+                TimeSpan? tmeAnt =
+                    Tempo(
+                        dadosAnterior.TME,
+                        chave);
+
+                TimeSpan? tmeAtual =
+                    Tempo(
+                        dadosAtual.TME,
+                        chave);
+
+                double notaAnt =
+                    Valor(
+                        dadosAnterior.Notas,
+                        chave);
+
+                double notaAtual =
+                    Valor(
+                        dadosAtual.Notas,
+                        chave);
+
+                string leitura =
+                    GerarLeituraAtendente(
+                        ant,
+                        atual,
+                        tmrAnt,
+                        tmrAtual,
+                        tmeAnt,
+                        tmeAtual,
+                        notaAnt,
+                        notaAtual);
+
+                string[] valores =
+                {
+                    NomeExibicao(chave),
+                    ant.ToString("N0"),
+                    atual.ToString("N0"),
+                    FormatarPercentualComSeta(pct),
+                    FormatarTempo(tmrAnt),
+                    FormatarTempo(tmrAtual),
+                    FormatarTempo(tmeAnt),
+                    FormatarTempo(tmeAtual),
+                    notaAnt > 0
+                        ? notaAnt.ToString("N2")
+                        : "—",
+                    notaAtual > 0
+                        ? notaAtual.ToString("N2")
+                        : "—",
+                    leitura
+                };
+
+                y =
+                    DesenharLinhaTabelaPdf(
+                        g,
+                        area.Left,
+                        y,
+                        larguras,
+                        valores,
+                        alturaLinha,
+                        i % 2 == 0
+                            ? Color.White
+                            : Color.FromArgb(
+                                247,
+                                249,
+                                251),
+                        5.6F);
+            }
+        }
+
+        private int DesenharCabecalhoTabelaPdfCompacto(
+            Graphics g,
+            int x,
+            int y,
+            int[] larguras,
+            ColunaTabelaPdf[] colunas,
+            int altura)
+        {
+            using var brush =
+                new SolidBrush(
+                    Color.FromArgb(
+                        233,
+                        238,
+                        243));
+
+            using var pen =
+                new Pen(
+                    Color.FromArgb(
+                        205,
+                        212,
+                        220));
+
+            using var fonte =
+                new Font(
+                    "Segoe UI Semibold",
+                    5.7F,
+                    FontStyle.Bold);
+
+            using var brushTexto =
+                new SolidBrush(CorTexto);
+
+            int atualX = x;
+
+            for (
+                int i = 0;
+                i < colunas.Length;
+                i++)
+            {
+                Rectangle rect =
+                    new Rectangle(
+                        atualX,
+                        y,
+                        larguras[i],
+                        altura);
+
+                g.FillRectangle(
+                    brush,
+                    rect);
+
+                g.DrawRectangle(
+                    pen,
+                    rect);
+
+                var areaTexto =
+                    new RectangleF(
+                        rect.Left + 3,
+                        rect.Top + 4,
+                        rect.Width - 6,
+                        rect.Height - 8);
+
+                using var formato =
+                    new StringFormat
+                    {
+                        Trimming =
+                            StringTrimming.EllipsisWord,
+                        FormatFlags =
+                            StringFormatFlags.LineLimit
+                    };
+
+                g.DrawString(
+                    colunas[i].Titulo,
+                    fonte,
+                    brushTexto,
+                    areaTexto,
+                    formato);
+
+                atualX +=
+                    larguras[i];
+            }
+
+            return y + altura;
+        }
+
+        private void DesenharMotivosPdf(
+            Graphics g,
+            Rectangle area,
+            int inicio,
+            int quantidade)
+        {
+            int y =
+                DesenharCabecalhoPdf(
+                    g,
+                    area,
+                    "Motivos de atendimento",
+                    "Comparação completa dos motivos entre os dois meses.");
+
+            var motivos =
+                dadosAnterior.Motivos.Keys
+                    .Union(
+                        dadosAtual.Motivos.Keys)
+                    .OrderByDescending(
+                        x =>
+                            Math.Max(
+                                Valor(
+                                    dadosAnterior.Motivos,
+                                    x),
+                                Valor(
+                                    dadosAtual.Motivos,
+                                    x)))
+                    .ToList();
+
+            var colunas =
+                new[]
+                {
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "Motivo",
+                        Peso = 3.4F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = dadosAnterior.Periodo,
+                        Peso = 1F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = dadosAtual.Periodo,
+                        Peso = 1F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "Diferença",
+                        Peso = 1F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "Variação",
+                        Peso = 1F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "Leitura",
+                        Peso = 1.3F
+                    }
+                };
+
+            int[] larguras =
+                CalcularLargurasTabela(
+                    area.Width,
+                    colunas);
+
+            const int alturaCabecalho = 28;
+            const int alturaLinha = 25;
+
+            y =
+                DesenharCabecalhoTabelaPdf(
+                    g,
+                    area.Left,
+                    y,
+                    larguras,
+                    colunas,
+                    alturaCabecalho);
+
+            int fim =
+                Math.Min(
+                    inicio + quantidade,
+                    motivos.Count);
+
+            for (
+                int i = inicio;
+                i < fim;
+                i++)
+            {
+                string motivo =
+                    motivos[i];
+
+                double ant =
+                    Valor(
+                        dadosAnterior.Motivos,
+                        motivo);
+
+                double atual =
+                    Valor(
+                        dadosAtual.Motivos,
+                        motivo);
+
+                double dif =
+                    atual - ant;
+
+                double pct =
+                    CalcularPercentual(
+                        ant,
+                        atual);
+
+                string[] valores =
+                {
+                    motivo,
+                    ant.ToString("N0"),
+                    atual.ToString("N0"),
+                    $"{dif:+0;-0;0}",
+                    FormatarPercentualComSeta(pct),
+                    dif > 0
+                        ? "Aumentou"
+                        : dif < 0
+                            ? "Reduziu"
+                            : "Estável"
+                };
+
+                y =
+                    DesenharLinhaTabelaPdf(
+                        g,
+                        area.Left,
+                        y,
+                        larguras,
+                        valores,
+                        alturaLinha,
+                        i % 2 == 0
+                            ? Color.White
+                            : Color.FromArgb(
+                                247,
+                                249,
+                                251),
+                        7.4F);
+            }
+        }
+
+        private void DesenharMarketingPdf(
+            Graphics g,
+            Rectangle area,
+            int inicio,
+            int quantidade,
+            bool primeiraPagina)
+        {
+            int y =
+                DesenharCabecalhoPdf(
+                    g,
+                    area,
+                    "Marketing",
+                    "Comparação dos contatos e criativos de marketing.");
+
+            if (primeiraPagina)
+            {
+                int espaco = 8;
+
+                int larguraCard =
+                    (area.Width -
+                     espaco * 2) / 3;
+
+                int alturaCard = 74;
+
+                DesenharKpiPdf(
+                    g,
+                    new Rectangle(
+                        area.Left,
+                        y,
+                        larguraCard,
+                        alturaCard),
+                    "Contatos de marketing",
+                    $"{dadosAnterior.MarketingTotal:N0} → " +
+                    $"{dadosAtual.MarketingTotal:N0}",
+                    FormatarPercentualComSeta(
+                        CalcularPercentual(
+                            dadosAnterior.MarketingTotal,
+                            dadosAtual.MarketingTotal)),
+                    CalcularPercentual(
+                        dadosAnterior.MarketingTotal,
+                        dadosAtual.MarketingTotal) >= 0
+                            ? CorVerde
+                            : CorVermelho);
+
+                DesenharKpiPdf(
+                    g,
+                    new Rectangle(
+                        area.Left +
+                        larguraCard +
+                        espaco,
+                        y,
+                        larguraCard,
+                        alturaCard),
+                    "Novos contatos",
+                    $"{dadosAnterior.NovosContatos:N0} → " +
+                    $"{dadosAtual.NovosContatos:N0}",
+                    FormatarPercentualComSeta(
+                        CalcularPercentual(
+                            dadosAnterior.NovosContatos,
+                            dadosAtual.NovosContatos)),
+                    CalcularPercentual(
+                        dadosAnterior.NovosContatos,
+                        dadosAtual.NovosContatos) >= 0
+                            ? CorVerde
+                            : CorVermelho);
+
+                DesenharKpiPdf(
+                    g,
+                    new Rectangle(
+                        area.Left +
+                        (larguraCard + espaco) * 2,
+                        y,
+                        larguraCard,
+                        alturaCard),
+                    "Reagendamentos",
+                    $"{dadosAnterior.Reagendamentos:N0} → " +
+                    $"{dadosAtual.Reagendamentos:N0}",
+                    FormatarPercentualComSeta(
+                        CalcularPercentual(
+                            dadosAnterior.Reagendamentos,
+                            dadosAtual.Reagendamentos)),
+                    CalcularPercentual(
+                        dadosAnterior.Reagendamentos,
+                        dadosAtual.Reagendamentos) <= 0
+                            ? CorVerde
+                            : CorVermelho);
+
+                y += alturaCard + 12;
+            }
+
+            var campanhas =
+                dadosAnterior.MarketingCriativos.Keys
+                    .Union(
+                        dadosAtual.MarketingCriativos.Keys)
+                    .OrderByDescending(
+                        x =>
+                            Math.Max(
+                                Valor(
+                                    dadosAnterior.MarketingCriativos,
+                                    x),
+                                Valor(
+                                    dadosAtual.MarketingCriativos,
+                                    x)))
+                    .ToList();
+
+            var colunas =
+                new[]
+                {
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "Criativo / campanha",
+                        Peso = 3.4F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = dadosAnterior.Periodo,
+                        Peso = 1F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = dadosAtual.Periodo,
+                        Peso = 1F
+                    },
+                    new ColunaTabelaPdf
+                    {
+                        Titulo = "Variação",
+                        Peso = 1F
+                    }
+                };
+
+            int[] larguras =
+                CalcularLargurasTabela(
+                    area.Width,
+                    colunas);
+
+            y =
+                DesenharCabecalhoTabelaPdf(
+                    g,
+                    area.Left,
+                    y,
+                    larguras,
+                    colunas,
+                    28);
+
+            int fim =
+                Math.Min(
+                    inicio + quantidade,
+                    campanhas.Count);
+
+            for (
+                int i = inicio;
+                i < fim;
+                i++)
+            {
+                string campanha =
+                    campanhas[i];
+
+                double ant =
+                    Valor(
+                        dadosAnterior.MarketingCriativos,
+                        campanha);
+
+                double atual =
+                    Valor(
+                        dadosAtual.MarketingCriativos,
+                        campanha);
+
+                double pct =
+                    CalcularPercentual(
+                        ant,
+                        atual);
+
+                string[] valores =
+                {
+                    campanha,
+                    ant.ToString("N0"),
+                    atual.ToString("N0"),
+                    FormatarPercentualComSeta(pct)
+                };
+
+                y =
+                    DesenharLinhaTabelaPdf(
+                        g,
+                        area.Left,
+                        y,
+                        larguras,
+                        valores,
+                        25,
+                        i % 2 == 0
+                            ? Color.White
+                            : Color.FromArgb(
+                                247,
+                                249,
+                                251),
+                        7.4F);
+            }
+        }
+
+        private void DesenharKpiPdf(
+            Graphics g,
+            Rectangle rect,
+            string titulo,
+            string valor,
+            string variacao,
+            Color corVariacao)
+        {
+            using var brushFundo =
+                new SolidBrush(Color.White);
+
+            using var fonteTitulo =
+                new Font(
+                    "Segoe UI",
+                    7.5F);
+
+            using var fonteValor =
+                new Font(
+                    "Segoe UI Semibold",
+                    13F,
+                    FontStyle.Bold);
+
+            using var fonteVar =
+                new Font(
+                    "Segoe UI Semibold",
+                    7.2F);
+
+            using var brushTitulo =
+                new SolidBrush(
+                    CorTextoSecundario);
+
+            using var brushValor =
+                new SolidBrush(CorTexto);
+
+            using var brushVar =
+                new SolidBrush(corVariacao);
+
+            g.FillRectangle(
+                brushFundo,
+                rect);
+
+            g.DrawString(
+                titulo,
+                fonteTitulo,
+                brushTitulo,
+                rect.Left + 10,
+                rect.Top + 8);
+
+            g.DrawString(
+                valor,
+                fonteValor,
+                brushValor,
+                rect.Left + 10,
+                rect.Top + 27);
+
+            g.DrawString(
+                variacao,
+                fonteVar,
+                brushVar,
+                rect.Left + 10,
+                rect.Top + 56);
+        }
+
+        private void DesenharCardTextoPdf(
+            Graphics g,
+            Rectangle rect,
+            Color fundo,
+            Color corTitulo,
+            string titulo,
+            string texto,
+            float tamanhoTexto = 7.8F)
+        {
+            using var brushFundo =
+                new SolidBrush(fundo);
+
+            using var fonteTitulo =
+                new Font(
+                    "Segoe UI Semibold",
+                    9.5F,
+                    FontStyle.Bold);
+
+            using var fonteTexto =
+                new Font(
+                    "Segoe UI",
+                    tamanhoTexto);
+
+            using var brushTitulo =
+                new SolidBrush(corTitulo);
+
+            using var brushTexto =
+                new SolidBrush(CorTexto);
+
+            g.FillRectangle(
+                brushFundo,
+                rect);
+
+            g.DrawString(
+                titulo,
+                fonteTitulo,
+                brushTitulo,
+                rect.Left + 12,
+                rect.Top + 10);
+
+            var areaTexto =
+                new RectangleF(
+                    rect.Left + 12,
+                    rect.Top + 34,
+                    rect.Width - 24,
+                    rect.Height - 44);
+
+            using var formato =
+                new StringFormat
+                {
+                    Trimming =
+                        StringTrimming.Word,
+                    FormatFlags =
+                        StringFormatFlags.LineLimit
+                };
+
+            g.DrawString(
+                texto,
+                fonteTexto,
+                brushTexto,
+                areaTexto,
+                formato);
+        }
+
+        private int DesenharCabecalhoTabelaPdf(
+            Graphics g,
+            int x,
+            int y,
+            int[] larguras,
+            ColunaTabelaPdf[] colunas,
+            int altura)
+        {
+            using var brush =
+                new SolidBrush(
+                    Color.FromArgb(
+                        233,
+                        238,
+                        243));
+
+            using var pen =
+                new Pen(
+                    Color.FromArgb(
+                        205,
+                        212,
+                        220));
+
+            using var fonte =
+                new Font(
+                    "Segoe UI Semibold",
+                    7F,
+                    FontStyle.Bold);
+
+            using var brushTexto =
+                new SolidBrush(CorTexto);
+
+            int atualX = x;
+
+            for (
+                int i = 0;
+                i < colunas.Length;
+                i++)
+            {
+                Rectangle rect =
+                    new Rectangle(
+                        atualX,
+                        y,
+                        larguras[i],
+                        altura);
+
+                g.FillRectangle(
+                    brush,
+                    rect);
+
+                g.DrawRectangle(
+                    pen,
+                    rect);
+
+                var areaTexto =
+                    new RectangleF(
+                        rect.Left + 4,
+                        rect.Top + 5,
+                        rect.Width - 8,
+                        rect.Height - 8);
+
+                g.DrawString(
+                    colunas[i].Titulo,
+                    fonte,
+                    brushTexto,
+                    areaTexto);
+
+                atualX +=
+                    larguras[i];
+            }
+
+            return y + altura;
+        }
+
+        private int DesenharLinhaTabelaPdf(
+            Graphics g,
+            int x,
+            int y,
+            int[] larguras,
+            string[] valores,
+            int altura,
+            Color fundo,
+            float tamanhoFonte)
+        {
+            using var brushFundo =
+                new SolidBrush(fundo);
+
+            using var pen =
+                new Pen(
+                    Color.FromArgb(
+                        220,
+                        225,
+                        230));
+
+            using var fonte =
+                new Font(
+                    "Segoe UI",
+                    tamanhoFonte);
+
+            using var brushTexto =
+                new SolidBrush(CorTexto);
+
+            int atualX = x;
+
+            for (
+                int i = 0;
+                i < larguras.Length;
+                i++)
+            {
+                Rectangle rect =
+                    new Rectangle(
+                        atualX,
+                        y,
+                        larguras[i],
+                        altura);
+
+                g.FillRectangle(
+                    brushFundo,
+                    rect);
+
+                g.DrawRectangle(
+                    pen,
+                    rect);
+
+                var textoRect =
+                    new RectangleF(
+                        rect.Left + 4,
+                        rect.Top + 4,
+                        rect.Width - 8,
+                        rect.Height - 8);
+
+                using var formato =
+                    new StringFormat
+                    {
+                        Trimming =
+                            StringTrimming.EllipsisWord,
+                        FormatFlags =
+                            StringFormatFlags.LineLimit
+                    };
+
+                g.DrawString(
+                    i < valores.Length
+                        ? valores[i]
+                        : "",
+                    fonte,
+                    brushTexto,
+                    textoRect,
+                    formato);
+
+                atualX +=
+                    larguras[i];
+            }
+
+            return y + altura;
+        }
+
+        private int[] CalcularLargurasTabela(
+            int larguraTotal,
+            ColunaTabelaPdf[] colunas)
+        {
+            float pesoTotal =
+                colunas.Sum(
+                    x =>
+                        x.Peso);
+
+            var larguras =
+                new int[colunas.Length];
+
+            int usado = 0;
+
+            for (
+                int i = 0;
+                i < colunas.Length;
+                i++)
+            {
+                if (i ==
+                    colunas.Length - 1)
+                {
+                    larguras[i] =
+                        larguraTotal - usado;
+                }
                 else
                 {
-                    string seta = linha.Variacao.Value >= 0 ? "▲" : "▼";
-                    textoVariacao = $"{seta} {Math.Abs(linha.Variacao.Value).ToString("0.0", PtBr)}%";
-                }
+                    larguras[i] =
+                        (int)Math.Round(
+                            larguraTotal *
+                            colunas[i].Peso /
+                            pesoTotal);
 
-                dgvAtendentes.Rows.Add(
-                    linha.Nome,
-                    linha.Anterior.ToString("N0", PtBr),
-                    linha.Atual.ToString("N0", PtBr),
-                    textoVariacao,
-                    linha.NotaAtual != null ? linha.NotaAtual.Media.ToString("0.00", PtBr) : "—",
-                    linha.TmrAtual.HasValue ? FormatarTempo(linha.TmrAtual.Value) : "—",
-                    linha.Diagnostico);
-            }
-        }
-
-        // =========================================================
-        // CONSIDERAÇÕES AUTOMÁTICAS
-        // =========================================================
-        private string GerarResumoExecutivo(RelatorioMensal anterior, RelatorioMensal atual, double taxaAnterior, double taxaAtual)
-        {
-            double? varConversas = CalcularVariacaoPercentual(anterior.Conversas, atual.Conversas);
-            double? varFinalizados = CalcularVariacaoPercentual(anterior.Finalizados, atual.Finalizados);
-            double? varNovos = CalcularVariacaoPercentual(anterior.NovosContatos, atual.NovosContatos);
-            double deltaTaxa = taxaAtual - taxaAnterior;
-
-            List<string> partes = new List<string>();
-
-            if (varConversas.HasValue)
-                partes.Add($"O volume de conversas {(varConversas >= 0 ? "cresceu" : "caiu")} {Math.Abs(varConversas.Value).ToString("0.0", PtBr)}%.");
-
-            if (varFinalizados.HasValue)
-                partes.Add($"Os atendimentos finalizados {(varFinalizados >= 0 ? "cresceram" : "caíram")} {Math.Abs(varFinalizados.Value).ToString("0.0", PtBr)}%.");
-
-            if (varNovos.HasValue)
-                partes.Add($"Novos contatos {(varNovos >= 0 ? "aumentaram" : "diminuíram")} {Math.Abs(varNovos.Value).ToString("0.0", PtBr)}%.");
-
-            partes.Add($"A taxa de finalização ficou em {taxaAtual.ToString("0.0", PtBr)}% ({(deltaTaxa >= 0 ? "+" : "")}{deltaTaxa.ToString("0.0", PtBr)} p.p.).");
-
-            if (atual.NotaMedia > 0)
-                partes.Add($"A nota média do atendimento foi {atual.NotaMedia.ToString("0.00", PtBr)}.");
-
-            return string.Join(Environment.NewLine + Environment.NewLine, partes.Take(5));
-        }
-
-        private string GerarAlertas(RelatorioMensal anterior, RelatorioMensal atual, double taxaAnterior, double taxaAtual)
-        {
-            List<string> alertas = new List<string>();
-
-            double deltaTaxa = taxaAtual - taxaAnterior;
-            if (deltaTaxa < -0.5)
-                alertas.Add($"● Taxa de finalização caiu {Math.Abs(deltaTaxa).ToString("0.0", PtBr)} p.p.");
-
-            int inatAnt = ValorMotivo(anterior, "Encerrado por inatividade do cliente");
-            int inatAtual = ValorMotivo(atual, "Encerrado por inatividade do cliente");
-            double? varInatividade = CalcularVariacaoPercentual(inatAnt, inatAtual);
-            if (varInatividade > 10)
-                alertas.Add($"● Encerramentos por inatividade aumentaram {varInatividade.Value.ToString("0.0", PtBr)}%.");
-
-            double? varReag = CalcularVariacaoPercentual(anterior.Reagendamentos, atual.Reagendamentos);
-            if (varReag > 15)
-                alertas.Add($"● Reagendamentos cresceram {varReag.Value.ToString("0.0", PtBr)}%.");
-
-            int tmrPiorou = ContarTmrComPiora(anterior, atual, TimeSpan.FromMinutes(10));
-            if (tmrPiorou > 0)
-                alertas.Add($"● {tmrPiorou} atendente(s) tiveram aumento superior a 10 min no TMR.");
-
-            if (alertas.Count == 0)
-                alertas.Add("✓ Nenhum alerta relevante foi identificado pelos critérios atuais.");
-
-            return string.Join(Environment.NewLine + Environment.NewLine, alertas.Take(5));
-        }
-
-        private string GerarOportunidades(RelatorioMensal anterior, RelatorioMensal atual)
-        {
-            List<string> itens = new List<string>();
-
-            double? varMarketing = CalcularVariacaoPercentual(anterior.ContatosMarketing, atual.ContatosMarketing);
-            if (varMarketing.HasValue && varMarketing > 0)
-                itens.Add($"✓ Contatos de marketing cresceram {varMarketing.Value.ToString("0.0", PtBr)}%.");
-
-            int orcAnt = ValorMotivo(anterior, "Orçamento de fórmula");
-            int orcAtual = ValorMotivo(atual, "Orçamento de fórmula");
-            double? varOrc = CalcularVariacaoPercentual(orcAnt, orcAtual);
-            if (varOrc.HasValue && varOrc > 0)
-                itens.Add($"✓ Orçamentos de fórmula aumentaram {varOrc.Value.ToString("0.0", PtBr)}%.");
-
-            double? varNovos = CalcularVariacaoPercentual(anterior.NovosContatos, atual.NovosContatos);
-            if (varNovos.HasValue && varNovos > 0)
-                itens.Add($"✓ Novos contatos cresceram {varNovos.Value.ToString("0.0", PtBr)}%.");
-
-            if (atual.NotaMedia >= 4.7)
-                itens.Add($"✓ Satisfação permanece em nível elevado ({atual.NotaMedia.ToString("0.00", PtBr)}).");
-
-            if (itens.Count == 0)
-                itens.Add("• Não houve oportunidade com crescimento relevante pelos critérios atuais.");
-
-            return string.Join(Environment.NewLine + Environment.NewLine, itens.Take(5));
-        }
-
-        private string GerarAcoes(RelatorioMensal anterior, RelatorioMensal atual, double taxaAnterior, double taxaAtual)
-        {
-            List<string> acoes = new List<string>();
-
-            if (taxaAtual < taxaAnterior - 0.5)
-                acoes.Add("Revisar horários de maior fila e distribuição entre atendentes.");
-
-            int inatAnt = ValorMotivo(anterior, "Encerrado por inatividade do cliente");
-            int inatAtual = ValorMotivo(atual, "Encerrado por inatividade do cliente");
-            if (CalcularVariacaoPercentual(inatAnt, inatAtual) > 10)
-                acoes.Add("Investigar por que mais conversas estão encerrando por inatividade.");
-
-            if (ContarTmrComPiora(anterior, atual, TimeSpan.FromMinutes(10)) > 0)
-                acoes.Add("Acompanhar os atendentes com maior aumento no TMR e verificar carga/fila.");
-
-            if (CalcularVariacaoPercentual(anterior.Reagendamentos, atual.Reagendamentos) > 15)
-                acoes.Add("Separar os reagendamentos por motivo para entender a origem do aumento.");
-
-            int orcAtual = ValorMotivo(atual, "Orçamento de fórmula");
-            if (orcAtual > 0)
-                acoes.Add("Acompanhar o funil orçamento → pedido → venda para medir conversão.");
-
-            if (acoes.Count == 0)
-                acoes.Add("Manter acompanhamento dos principais indicadores e repetir a comparação no próximo mês.");
-
-            return string.Join(Environment.NewLine + Environment.NewLine,
-                acoes.Take(5).Select((x, i) => $"{i + 1}. {x}"));
-        }
-
-        private string GerarDestaques(RelatorioMensal anterior, RelatorioMensal atual)
-        {
-            List<string> linhas = new List<string>();
-
-            var evolucoes = atual.FinalizadosPorAtendente
-                .Where(x => anterior.FinalizadosPorAtendente.TryGetValue(x.Key, out int ant) && ant > 0)
-                .Select(x => new
-                {
-                    Nome = x.Key,
-                    Var = ((x.Value - anterior.FinalizadosPorAtendente[x.Key]) / (double)anterior.FinalizadosPorAtendente[x.Key]) * 100d
-                })
-                .OrderByDescending(x => x.Var)
-                .FirstOrDefault();
-
-            if (evolucoes != null && evolucoes.Var > 0)
-            {
-                linhas.Add("Maior evolução de volume");
-                linhas.Add($"{evolucoes.Nome}  ▲ {evolucoes.Var.ToString("0.0", PtBr)}%");
-                linhas.Add(string.Empty);
-            }
-
-            var melhorNota = atual.Notas
-                .Where(x => x.Value.Votos >= 10)
-                .OrderByDescending(x => x.Value.Media)
-                .ThenByDescending(x => x.Value.Votos)
-                .FirstOrDefault();
-
-            if (!string.IsNullOrWhiteSpace(melhorNota.Key))
-            {
-                linhas.Add("Melhor nota (mín. 10 avaliações)");
-                linhas.Add($"{melhorNota.Key}  ★ {melhorNota.Value.Media.ToString("0.00", PtBr)}");
-                linhas.Add(string.Empty);
-            }
-
-            var maiorVolume = atual.FinalizadosPorAtendente.OrderByDescending(x => x.Value).FirstOrDefault();
-            if (!string.IsNullOrWhiteSpace(maiorVolume.Key))
-            {
-                linhas.Add("Maior volume no mês");
-                linhas.Add($"{maiorVolume.Key}  {maiorVolume.Value.ToString("N0", PtBr)} atendimentos");
-            }
-
-            return string.Join(Environment.NewLine, linhas);
-        }
-
-        private string GerarIntegridade(RelatorioMensal anterior, RelatorioMensal atual)
-        {
-            List<string> linhas = new List<string>();
-
-            if (!atual.TmaDisponivel)
-                linhas.Add("⚠ TMA não disponível no mês atual.");
-
-            foreach (var item in atual.PossiveisVendas)
-            {
-                if (atual.Motivos.TryGetValue(item.Key, out int principal) && principal != item.Value)
-                {
-                    linhas.Add($"⚠ Divergência em '{item.Key}': {principal.ToString("N0", PtBr)} x {item.Value.ToString("N0", PtBr)}.");
+                    usado +=
+                        larguras[i];
                 }
             }
 
-            if (atual.AtendimentosRelacao.HasValue && atual.AtendimentosRelacao.Value != atual.Finalizados)
-            {
-                linhas.Add($"⚠ Total diário ({atual.AtendimentosRelacao.Value.ToString("N0", PtBr)}) difere do total finalizado ({atual.Finalizados.ToString("N0", PtBr)}).");
-            }
-
-            if (linhas.Count == 0)
-                linhas.Add("✓ Não foram encontradas divergências relevantes nos dados utilizados.");
-
-            return string.Join(Environment.NewLine + Environment.NewLine, linhas.Take(5));
+            return larguras;
         }
 
-        private static string GerarDiagnosticoAtendente(
-            int anterior,
-            int atual,
-            NotaAtendente? notaAnterior,
-            NotaAtendente? notaAtual,
-            TimeSpan? tmrAnterior,
-            TimeSpan? tmrAtual)
+        // ============================================================
+        // EXPORTAR EXCEL
+        // ============================================================
+        private void ExportarExcel()
         {
-            double? varVolume = anterior > 0 ? ((atual - anterior) / (double)anterior) * 100d : null;
-            double? deltaNota = notaAnterior != null && notaAtual != null ? notaAtual.Media - notaAnterior.Media : null;
-            TimeSpan? deltaTmr = tmrAnterior.HasValue && tmrAtual.HasValue ? tmrAtual.Value - tmrAnterior.Value : null;
-
-            if (anterior == 0 && atual > 0)
-                return "Novo no comparativo";
-
-            if (varVolume >= 15 && deltaTmr.HasValue && deltaTmr.Value <= TimeSpan.FromMinutes(5) && (!deltaNota.HasValue || deltaNota.Value >= -0.10))
-                return "Boa evolução";
-
-            if (varVolume >= 15 && deltaTmr.HasValue && deltaTmr.Value > TimeSpan.FromMinutes(10))
-                return "Volume ↑ / TMR piorou";
-
-            if (varVolume <= -20 && ((deltaNota.HasValue && deltaNota.Value > 0) || (deltaTmr.HasValue && deltaTmr.Value < TimeSpan.Zero)))
-                return "Volume ↓ / qualidade melhorou";
-
-            if (deltaTmr.HasValue && deltaTmr.Value > TimeSpan.FromMinutes(15))
-                return "Atenção ao TMR";
-
-            if (deltaNota.HasValue && deltaNota.Value <= -0.20)
-                return "Queda na nota";
-
-            if (varVolume.HasValue && Math.Abs(varVolume.Value) <= 10)
-                return "Estável";
-
-            if (varVolume < -20)
-                return "Queda de volume: verificar escala";
-
-            return "Acompanhar evolução";
-        }
-
-        // =========================================================
-        // LIMPAR
-        // =========================================================
-        private void LimparDados(bool atualizarStatus = true)
-        {
-            caminhoMesRetrasado = string.Empty;
-            caminhoMesPassado = string.Empty;
-            relatorioAnteriorAtual = null;
-            relatorioAtualAtual = null;
-
-            if (txtMesRetrasado != null)
-                txtMesRetrasado.Text = "Nenhum arquivo selecionado";
-
-            if (txtMesPassado != null)
-                txtMesPassado.Text = "Nenhum arquivo selecionado";
-
-            if (lblPeriodo1 != null)
-                lblPeriodo1.Text = string.Empty;
-
-            if (lblPeriodo2 != null)
-                lblPeriodo2.Text = string.Empty;
-
-            LimparResultados();
-
-            if (atualizarStatus && lblStatus != null)
-                lblStatus.Text = "●  Dados limpos. Selecione os dois arquivos novamente.";
-            else if (lblStatus != null)
-                lblStatus.Text = "●  Aguardando os dois arquivos.";
-        }
-
-        private void LimparResultados()
-        {
-            LimparKpi(kpiConversas);
-            LimparKpi(kpiFinalizados);
-            LimparKpi(kpiTaxaFinalizacao);
-            LimparKpi(kpiReagendamentos);
-            LimparKpi(kpiNovosContatos);
-            LimparKpi(kpiNotaMedia);
-
-            if (lblResumoTexto != null) lblResumoTexto.Text = string.Empty;
-            if (lblAlertasTexto != null) lblAlertasTexto.Text = string.Empty;
-            if (lblOportunidadesTexto != null) lblOportunidadesTexto.Text = string.Empty;
-            if (lblAcoesTexto != null) lblAcoesTexto.Text = string.Empty;
-            if (lblDestaquesTexto != null) lblDestaquesTexto.Text = string.Empty;
-            if (lblIntegridadeTexto != null) lblIntegridadeTexto.Text = string.Empty;
-
-            if (dgvAtendentes != null)
-            {
-                dgvAtendentes.Rows.Clear();
-                dgvAtendentes.Columns["Anterior"].HeaderText = "Mês retrasado";
-                dgvAtendentes.Columns["Atual"].HeaderText = "Mês passado";
-            }
-
-            if (graficoMotivos != null)
-            {
-                graficoMotivos.Categories = Array.Empty<string>();
-                graficoMotivos.PreviousValues = Array.Empty<double>();
-                graficoMotivos.CurrentValues = Array.Empty<double>();
-                graficoMotivos.PreviousLabel = "Mês retrasado";
-                graficoMotivos.CurrentLabel = "Mês passado";
-                graficoMotivos.Invalidate();
-            }
-        }
-
-        private static void LimparKpi(KpiView? kpi)
-        {
-            if (kpi == null)
+            if (!comparacaoRealizada)
                 return;
 
-            kpi.Valor.Text = string.Empty;
-            kpi.Variacao.Text = string.Empty;
-            kpi.Anterior.Text = string.Empty;
+            using var sfd = new SaveFileDialog
+            {
+                Title = "Salvar comparativo",
+                Filter = "Excel (*.xlsx)|*.xlsx",
+                FileName = $"Comparativo_{dadosAnterior.Periodo.Replace("/", "-")}_{dadosAtual.Periodo.Replace("/", "-")}.xlsx"
+            };
+
+            if (sfd.ShowDialog() != DialogResult.OK)
+                return;
+
+            try
+            {
+                using var wb = new XLWorkbook();
+
+                var resumo = wb.Worksheets.Add("Resumo");
+                resumo.Cell("A1").Value = "Relatório de Atendimento - Comparativo";
+                resumo.Cell("A2").Value = $"{dadosAnterior.Periodo} x {dadosAtual.Periodo}";
+                resumo.Cell("A4").Value = "Indicador";
+                resumo.Cell("B4").Value = dadosAnterior.Periodo;
+                resumo.Cell("C4").Value = dadosAtual.Periodo;
+                resumo.Cell("D4").Value = "Variação";
+
+                var itens = new[]
+                {
+                    ("Conversas", dadosAnterior.Conversas, dadosAtual.Conversas),
+                    ("Finalizados", dadosAnterior.Finalizados, dadosAtual.Finalizados),
+                    ("Novos contatos", dadosAnterior.NovosContatos, dadosAtual.NovosContatos),
+                    ("Reagendamentos", dadosAnterior.Reagendamentos, dadosAtual.Reagendamentos),
+                    ("Inatividade", dadosAnterior.Inatividade, dadosAtual.Inatividade),
+                    ("Marketing", dadosAnterior.MarketingTotal, dadosAtual.MarketingTotal),
+                    ("Templates", dadosAnterior.TemplatesTotal, dadosAtual.TemplatesTotal)
+                };
+
+                int linha = 5;
+                foreach (var item in itens)
+                {
+                    resumo.Cell(linha, 1).Value = item.Item1;
+                    resumo.Cell(linha, 2).Value = item.Item2;
+                    resumo.Cell(linha, 3).Value = item.Item3;
+                    resumo.Cell(linha, 4).Value = CalcularPercentual(item.Item2, item.Item3) / 100.0;
+                    resumo.Cell(linha, 4).Style.NumberFormat.Format = "0.0%";
+                    linha++;
+                }
+
+                resumo.Cell(linha + 1, 1).Value = "Resumo curto";
+                resumo.Cell(linha + 2, 1).Value = GerarResumoCurto();
+
+                var at = wb.Worksheets.Add("Atendentes");
+                string[] cab = { "Atendente", dadosAnterior.Periodo, dadosAtual.Periodo, "Variação", "TMR anterior", "TMR atual", "TME anterior", "TME atual", "Nota anterior", "Nota atual" };
+                for (int c = 0; c < cab.Length; c++) at.Cell(1, c + 1).Value = cab[c];
+
+                linha = 2;
+                foreach (var chave in dadosAnterior.AtendentesFinalizados.Keys.Union(dadosAtual.AtendentesFinalizados.Keys).OrderBy(NomeCurto))
+                {
+                    double ant = Valor(dadosAnterior.AtendentesFinalizados, chave);
+                    double atual = Valor(dadosAtual.AtendentesFinalizados, chave);
+                    at.Cell(linha, 1).Value = NomeExibicao(chave);
+                    at.Cell(linha, 2).Value = ant;
+                    at.Cell(linha, 3).Value = atual;
+                    at.Cell(linha, 4).Value = CalcularPercentual(ant, atual) / 100.0;
+                    at.Cell(linha, 4).Style.NumberFormat.Format = "0.0%";
+                    at.Cell(linha, 5).Value = FormatarTempo(Tempo(dadosAnterior.TMR, chave));
+                    at.Cell(linha, 6).Value = FormatarTempo(Tempo(dadosAtual.TMR, chave));
+                    at.Cell(linha, 7).Value = FormatarTempo(Tempo(dadosAnterior.TME, chave));
+                    at.Cell(linha, 8).Value = FormatarTempo(Tempo(dadosAtual.TME, chave));
+                    at.Cell(linha, 9).Value = Valor(dadosAnterior.Notas, chave);
+                    at.Cell(linha, 10).Value = Valor(dadosAtual.Notas, chave);
+                    linha++;
+                }
+
+                var mot = wb.Worksheets.Add("Motivos");
+                mot.Cell("A1").Value = "Motivo";
+                mot.Cell("B1").Value = dadosAnterior.Periodo;
+                mot.Cell("C1").Value = dadosAtual.Periodo;
+                mot.Cell("D1").Value = "Variação";
+
+                linha = 2;
+                foreach (var m in dadosAnterior.Motivos.Keys.Union(dadosAtual.Motivos.Keys))
+                {
+                    double ant = Valor(dadosAnterior.Motivos, m);
+                    double atual = Valor(dadosAtual.Motivos, m);
+                    mot.Cell(linha, 1).Value = m;
+                    mot.Cell(linha, 2).Value = ant;
+                    mot.Cell(linha, 3).Value = atual;
+                    mot.Cell(linha, 4).Value = CalcularPercentual(ant, atual) / 100.0;
+                    mot.Cell(linha, 4).Style.NumberFormat.Format = "0.0%";
+                    linha++;
+                }
+
+                foreach (var ws in wb.Worksheets)
+                {
+                    var used = ws.RangeUsed();
+                    if (used != null)
+                    {
+                        used.Style.Font.FontName = "Segoe UI";
+                        ws.Columns().AdjustToContents();
+                    }
+                }
+
+                wb.SaveAs(sfd.FileName);
+
+                MessageBox.Show("Comparativo exportado com sucesso.", "Exportar",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Erro ao exportar:\n" + ex.Message, "Exportar",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
-        // =========================================================
+        // ============================================================
+        // COMPARAÇÕES
+        // ============================================================
+        private List<MudancaTempo> CompararTempos(
+            Dictionary<string, TimeSpan?> ant,
+            Dictionary<string, TimeSpan?> atual,
+            double limiteSegundos)
+        {
+            var lista = new List<MudancaTempo>();
+
+            foreach (var chave in ant.Keys.Intersect(atual.Keys))
+            {
+                var a = ant[chave];
+                var b = atual[chave];
+
+                if (!a.HasValue || !b.HasValue) continue;
+
+                double dif = (b.Value - a.Value).TotalSeconds;
+                if (Math.Abs(dif) < limiteSegundos) continue;
+
+                lista.Add(new MudancaTempo
+                {
+                    Nome = NomeExibicao(chave),
+                    Anterior = a.Value,
+                    Atual = b.Value,
+                    DiferencaSegundos = dif
+                });
+            }
+
+            return lista;
+        }
+
+        private List<MudancaNumero> CompararNumeros(
+            Dictionary<string, double> ant,
+            Dictionary<string, double> atual)
+        {
+            var lista = new List<MudancaNumero>();
+
+            foreach (var chave in ant.Keys.Union(atual.Keys))
+            {
+                double a = Valor(ant, chave);
+                double b = Valor(atual, chave);
+                lista.Add(new MudancaNumero
+                {
+                    Nome = NomeExibicao(chave),
+                    Anterior = a,
+                    Atual = b,
+                    Percentual = CalcularPercentual(a, b)
+                });
+            }
+
+            return lista;
+        }
+
+        private List<MudancaNota> CompararNotas(
+            Dictionary<string, double> ant,
+            Dictionary<string, double> atual)
+        {
+            var lista = new List<MudancaNota>();
+
+            foreach (var chave in ant.Keys.Intersect(atual.Keys))
+            {
+                double a = ant[chave];
+                double b = atual[chave];
+
+                lista.Add(new MudancaNota
+                {
+                    Nome = NomeExibicao(chave),
+                    Anterior = a,
+                    Atual = b,
+                    Diferenca = b - a
+                });
+            }
+
+            return lista;
+        }
+
+        // ============================================================
         // HELPERS
-        // =========================================================
-        private static double CalcularTaxa(int parte, int total)
+        // ============================================================
+        private string NormalizarTexto(string texto)
         {
-            return total <= 0 ? 0 : (parte / (double)total) * 100d;
-        }
+            if (string.IsNullOrWhiteSpace(texto)) return "";
 
-        private static double? CalcularVariacaoPercentual(int anterior, int atual)
-        {
-            if (anterior == 0)
-                return null;
+            texto = texto.Trim().ToLowerInvariant();
 
-            return ((atual - anterior) / (double)anterior) * 100d;
-        }
+            string formD = texto.Normalize(NormalizationForm.FormD);
+            var sb = new StringBuilder();
 
-        private static int ValorMotivo(RelatorioMensal r, string motivo)
-        {
-            return r.Motivos.TryGetValue(motivo, out int valor) ? valor : 0;
-        }
-
-        private static int ContarTmrComPiora(RelatorioMensal anterior, RelatorioMensal atual, TimeSpan limite)
-        {
-            int total = 0;
-
-            foreach (var item in atual.TMR)
+            foreach (char ch in formD)
             {
-                if (anterior.TMR.TryGetValue(item.Key, out TimeSpan ant) && item.Value - ant > limite)
-                    total++;
+                var cat = CharUnicodeInfo.GetUnicodeCategory(ch);
+                if (cat != UnicodeCategory.NonSpacingMark)
+                    sb.Append(ch);
             }
 
-            return total;
+            return sb.ToString()
+                .Normalize(NormalizationForm.FormC)
+                .Replace(":", "")
+                .Trim();
         }
 
-        private static string AbreviarMotivo(string motivo)
+        private string NormalizarNome(string nome)
         {
-            string norm = Normalizar(motivo);
+            string n = NormalizarTexto(nome);
 
-            if (norm.Contains("atendimento ja realizado")) return "Já realizado";
-            if (norm.Contains("pedido de formula")) return "Pedido fórmula";
-            if (norm.Contains("alteracao no pedido")) return "Alteração";
-            if (norm.Contains("encerrado por inatividade")) return "Inatividade";
-            if (norm.Contains("orcamento de formula")) return "Orçamento";
-            if (norm.Contains("duvida de formula")) return "Dúvida fórmula";
-            if (norm.Contains("avaliacao")) return "Avaliação";
-            if (norm.Contains("entrega")) return "Entrega";
-            if (norm.Contains("repeticao")) return "Repetição";
+            n = n.Replace("dr. gurgel", "gurgel")
+                 .Replace("w. luiz", "wl")
+                 .Replace("w luiz", "wl")
+                 .Replace("washington luiz", "wl");
 
-            return motivo.Length <= 14 ? motivo : motivo[..14] + "…";
+            return n.Trim();
         }
 
-        private static string FormatarTempo(TimeSpan tempo)
+        private string NomeExibicao(string chave)
         {
-            if (tempo.TotalDays >= 1)
-                return $"{(int)tempo.TotalDays}d {tempo.Hours:00}h {tempo.Minutes:00}m";
+            if (string.IsNullOrWhiteSpace(chave))
+                return "";
 
-            if (tempo.TotalHours >= 1)
-                return $"{(int)tempo.TotalHours}h {tempo.Minutes:00}m";
-
-            return $"{tempo.Minutes}m {tempo.Seconds:00}s";
+            return CultureInfo.GetCultureInfo("pt-BR")
+                .TextInfo
+                .ToTitleCase(chave);
         }
 
-        private static string Normalizar(string? texto)
+        private string NomeCurto(string nome)
         {
-            if (string.IsNullOrWhiteSpace(texto))
-                return string.Empty;
+            if (string.IsNullOrWhiteSpace(nome)) return "";
 
-            string formD = texto.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
-            StringBuilder sb = new StringBuilder();
+            string n = nome;
+            n = n.Replace(" - dr. gurgel", "", StringComparison.OrdinalIgnoreCase)
+                 .Replace(" - gurgel", "", StringComparison.OrdinalIgnoreCase)
+                 .Replace("-gurgel", "", StringComparison.OrdinalIgnoreCase)
+                 .Replace(" - wl", "", StringComparison.OrdinalIgnoreCase)
+                 .Replace(" - w. luiz", "", StringComparison.OrdinalIgnoreCase)
+                 .Replace(" w. luiz", "", StringComparison.OrdinalIgnoreCase);
 
-            foreach (char c in formD)
-            {
-                UnicodeCategory categoria = CharUnicodeInfo.GetUnicodeCategory(c);
-                if (categoria != UnicodeCategory.NonSpacingMark)
-                    sb.Append(c);
-            }
+            n = n.Trim();
 
-            return Regex.Replace(sb.ToString().Normalize(NormalizationForm.FormC), @"\s+", " ").Trim();
-        }
-    }
-
-    // =============================================================
-    // MODELOS
-    // =============================================================
-    public sealed class KpiView
-    {
-        public Label Valor { get; }
-        public Label Variacao { get; }
-        public Label Anterior { get; }
-
-        public KpiView(Label valor, Label variacao, Label anterior)
-        {
-            Valor = valor;
-            Variacao = variacao;
-            Anterior = anterior;
-        }
-    }
-
-    public sealed class NotaAtendente
-    {
-        public double Media { get; set; }
-        public int Votos { get; set; }
-    }
-
-    public sealed class RelatorioMensal
-    {
-        public DateTime DataReferencia { get; set; }
-        public string Periodo { get; set; } = string.Empty;
-
-        public int Conversas { get; set; }
-        public int Finalizados { get; set; }
-        public int? AtendimentosRelacao { get; set; }
-        public int Reagendamentos { get; set; }
-        public int NovosContatos { get; set; }
-        public int ContatosMarketing { get; set; }
-        public int MensagensTemplate { get; set; }
-        public double NotaMedia { get; set; }
-        public bool TmaDisponivel { get; set; }
-
-        public Dictionary<string, int> Motivos { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, int> PossiveisVendas { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, int> MarketingCriativos { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, int> FinalizadosPorAtendente { get; set; } = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, TimeSpan> TMR { get; set; } = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, TimeSpan> TME { get; set; } = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, TimeSpan> TMA { get; set; } = new Dictionary<string, TimeSpan>(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, NotaAtendente> Notas { get; set; } = new Dictionary<string, NotaAtendente>(StringComparer.OrdinalIgnoreCase);
-    }
-
-    internal static class StringExtensions
-    {
-        public static string FirstCharToUpper(this string texto)
-        {
-            if (string.IsNullOrWhiteSpace(texto))
-                return texto;
-
-            return char.ToUpper(texto[0], PtCulture) + texto[1..];
+            // nomes normalizados estão em minúsculo: coloca iniciais em maiúscula
+            return CultureInfo.GetCultureInfo("pt-BR").TextInfo.ToTitleCase(n);
         }
 
-        private static readonly CultureInfo PtCulture = CultureInfo.GetCultureInfo("pt-BR");
-    }
-
-    // =============================================================
-    // PAINEL ARREDONDADO
-    // =============================================================
-    public class RoundedPanel : Panel
-    {
-        private int _radius = 10;
-        private Color _borderColor = Color.LightGray;
-        private int _borderWidth = 1;
-
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public int Radius
+        private string JuntarNomes(List<string> nomes)
         {
-            get => _radius;
-            set
-            {
-                _radius = Math.Max(0, value);
-                AtualizarRegiao();
-                Invalidate();
-            }
+            nomes = nomes.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToList();
+
+            if (nomes.Count == 0) return "";
+            if (nomes.Count == 1) return nomes[0];
+            if (nomes.Count == 2) return $"{nomes[0]} e {nomes[1]}";
+
+            return string.Join(", ", nomes.Take(nomes.Count - 1)) + " e " + nomes.Last();
         }
 
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public Color BorderColor
+        private double CalcularPercentual(double anterior, double atual)
         {
-            get => _borderColor;
-            set
-            {
-                _borderColor = value;
-                Invalidate();
-            }
+            if (Math.Abs(anterior) < 0.000001)
+                return atual > 0 ? 100 : 0;
+
+            return (atual - anterior) / anterior * 100.0;
         }
 
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public int BorderWidth
+        private string FormatarPercentualComSeta(double p)
         {
-            get => _borderWidth;
-            set
-            {
-                _borderWidth = Math.Max(0, value);
-                Invalidate();
-            }
+            if (Math.Abs(p) < 0.05) return "● 0,0%";
+            return p > 0 ? $"▲ {Math.Abs(p):N1}%" : $"▼ {Math.Abs(p):N1}%";
         }
 
-        public RoundedPanel()
+        private string FormatarTempo(TimeSpan? t)
         {
-            SetStyle(
-                ControlStyles.AllPaintingInWmPaint |
-                ControlStyles.UserPaint |
-                ControlStyles.OptimizedDoubleBuffer |
-                ControlStyles.ResizeRedraw,
-                true);
+            if (!t.HasValue) return "—";
+
+            if (t.Value.TotalDays >= 1)
+                return $"{(int)t.Value.TotalDays}d {t.Value.Hours:00}h {t.Value.Minutes:00}m";
+
+            if (t.Value.TotalHours >= 1)
+                return $"{(int)t.Value.TotalHours}h {t.Value.Minutes:00}m";
+
+            return $"{t.Value.Minutes}m {t.Value.Seconds:00}s";
         }
 
-        protected override void OnResize(EventArgs eventargs)
+        private double Valor(Dictionary<string, double> dict, string chave)
         {
-            base.OnResize(eventargs);
-            AtualizarRegiao();
-            Invalidate();
+            return dict != null && dict.TryGetValue(chave, out var v) ? v : 0;
         }
 
-        private void AtualizarRegiao()
+        private TimeSpan? Tempo(Dictionary<string, TimeSpan?> dict, string chave)
         {
-            if (Width <= 0 || Height <= 0)
-                return;
-
-            Rectangle rect = new Rectangle(0, 0, Width, Height);
-            int radius = Math.Min(Radius, Math.Min(Width, Height) / 2);
-
-            using GraphicsPath path = CriarPath(rect, radius);
-            Region? antiga = Region;
-            Region = new Region(path);
-            antiga?.Dispose();
+            return dict != null && dict.TryGetValue(chave, out var v) ? v : null;
         }
 
-        protected override void OnPaint(PaintEventArgs e)
+        private double ValorPorDescricao(Dictionary<string, double> dict, string descricao)
         {
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-
-            Rectangle rect = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
-            int radius = Math.Min(Radius, Math.Min(rect.Width, rect.Height) / 2);
-
-            using GraphicsPath path = CriarPath(rect, radius);
-            using SolidBrush brush = new SolidBrush(BackColor);
-            e.Graphics.FillPath(brush, path);
-
-            if (BorderWidth > 0)
-            {
-                using Pen pen = new Pen(BorderColor, BorderWidth);
-                e.Graphics.DrawPath(pen, path);
-            }
-
-            base.OnPaint(e);
+            string alvo = NormalizarTexto(descricao);
+            foreach (var kv in dict)
+                if (NormalizarTexto(kv.Key) == alvo)
+                    return kv.Value;
+            return 0;
         }
 
-        private static GraphicsPath CriarPath(Rectangle rect, int radius)
+        // ============================================================
+        // MODELOS
+        // ============================================================
+        private class PaginaRelatorioPdf
         {
-            GraphicsPath path = new GraphicsPath();
-
-            if (radius <= 0)
-            {
-                path.AddRectangle(rect);
-                path.CloseFigure();
-                return path;
-            }
-
-            int diameter = radius * 2;
-            Rectangle arc = new Rectangle(rect.Left, rect.Top, diameter, diameter);
-
-            path.AddArc(arc, 180, 90);
-            arc.X = rect.Right - diameter;
-            path.AddArc(arc, 270, 90);
-            arc.Y = rect.Bottom - diameter;
-            path.AddArc(arc, 0, 90);
-            arc.X = rect.Left;
-            path.AddArc(arc, 90, 90);
-            path.CloseFigure();
-
-            return path;
-        }
-    }
-
-    // =============================================================
-    // GRÁFICO DE BARRAS
-    // =============================================================
-    public class ComparisonBarChart : Control
-    {
-        private string[] _categories = Array.Empty<string>();
-        private double[] _previousValues = Array.Empty<double>();
-        private double[] _currentValues = Array.Empty<double>();
-        private string _previousLabel = "Mês retrasado";
-        private string _currentLabel = "Mês passado";
-
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public string[] Categories
-        {
-            get => _categories;
-            set { _categories = value ?? Array.Empty<string>(); Invalidate(); }
+            public string Tipo { get; set; } = "";
+            public int Inicio { get; set; }
+            public int Quantidade { get; set; }
+            public bool PrimeiraPagina { get; set; }
         }
 
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public double[] PreviousValues
+        private class ColunaTabelaPdf
         {
-            get => _previousValues;
-            set { _previousValues = value ?? Array.Empty<double>(); Invalidate(); }
+            public string Titulo { get; set; } = "";
+            public float Peso { get; set; }
         }
 
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public double[] CurrentValues
+        private class DadosMes
         {
-            get => _currentValues;
-            set { _currentValues = value ?? Array.Empty<double>(); Invalidate(); }
+            public string Arquivo { get; set; } = "";
+            public string Periodo { get; set; } = "";
+
+            public double Conversas { get; set; }
+            public double Finalizados { get; set; }
+            public double NovosContatos { get; set; }
+            public double Reagendamentos { get; set; }
+            public double TemplatesTotal { get; set; }
+            public double Inatividade { get; set; }
+            public double OrcamentoFormula { get; set; }
+            public double OrcamentoFormulaPossivelVenda { get; set; }
+
+            public double MarketingTotal { get; set; }
+
+            public double NotaGeral { get; set; }
+            public double NotaWL { get; set; }
+            public double NotaGurgel { get; set; }
+
+            public Dictionary<string, double> AtendentesFinalizados { get; set; } =
+                new(StringComparer.OrdinalIgnoreCase);
+
+            public Dictionary<string, double> Motivos { get; set; } =
+                new(StringComparer.OrdinalIgnoreCase);
+
+            public Dictionary<string, double> MarketingCriativos { get; set; } =
+                new(StringComparer.OrdinalIgnoreCase);
+
+            public Dictionary<string, TimeSpan?> TMR { get; set; } =
+                new(StringComparer.OrdinalIgnoreCase);
+
+            public Dictionary<string, TimeSpan?> TME { get; set; } =
+                new(StringComparer.OrdinalIgnoreCase);
+
+            public Dictionary<string, TimeSpan?> TMA { get; set; } =
+                new(StringComparer.OrdinalIgnoreCase);
+
+            public Dictionary<string, double> Notas { get; set; } =
+                new(StringComparer.OrdinalIgnoreCase);
         }
 
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public string PreviousLabel
+        private class MudancaTempo
         {
-            get => _previousLabel;
-            set { _previousLabel = value ?? string.Empty; Invalidate(); }
+            public string Nome { get; set; } = "";
+            public TimeSpan Anterior { get; set; }
+            public TimeSpan Atual { get; set; }
+            public double DiferencaSegundos { get; set; }
         }
 
-        [Browsable(false)]
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public string CurrentLabel
+        private class MudancaNumero
         {
-            get => _currentLabel;
-            set { _currentLabel = value ?? string.Empty; Invalidate(); }
+            public string Nome { get; set; } = "";
+            public double Anterior { get; set; }
+            public double Atual { get; set; }
+            public double Percentual { get; set; }
         }
 
-        public ComparisonBarChart()
+        private class MudancaNota
         {
-            SetStyle(
-                ControlStyles.UserPaint |
-                ControlStyles.AllPaintingInWmPaint |
-                ControlStyles.OptimizedDoubleBuffer |
-                ControlStyles.ResizeRedraw,
-                true);
-
-            BackColor = Color.White;
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
-
-            if (Categories.Length == 0 ||
-                PreviousValues.Length != Categories.Length ||
-                CurrentValues.Length != Categories.Length ||
-                Width < 100 || Height < 100)
-            {
-                return;
-            }
-
-            Graphics g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-
-            int esquerda = 48;
-            int direita = 15;
-            int topo = 42;
-            int baixo = 52;
-
-            Rectangle area = new Rectangle(
-                esquerda,
-                topo,
-                Math.Max(10, Width - esquerda - direita),
-                Math.Max(10, Height - topo - baixo));
-
-            double max = Math.Max(PreviousValues.Max(), CurrentValues.Max());
-            if (max <= 0) max = 1;
-            max *= 1.15;
-
-            using Pen gridPen = new Pen(Color.FromArgb(230, 234, 238), 1F);
-            using Font fonteLegenda = new Font("Segoe UI", 7.2F);
-            using Font fonteValor = new Font("Segoe UI Semibold", 7F);
-            using Font fonteCategoria = new Font("Segoe UI", 6.8F);
-            using SolidBrush brushAnterior = new SolidBrush(Color.FromArgb(39, 111, 86));
-            using SolidBrush brushAtual = new SolidBrush(Color.FromArgb(111, 181, 137));
-            using SolidBrush brushTexto = new SolidBrush(Color.FromArgb(60, 70, 80));
-
-            for (int i = 0; i <= 4; i++)
-            {
-                float y = area.Top + area.Height / 4F * i;
-                g.DrawLine(gridPen, area.Left, y, area.Right, y);
-
-                double valor = max - max / 4D * i;
-                g.DrawString(((int)valor).ToString("N0", CultureInfo.GetCultureInfo("pt-BR")),
-                    fonteCategoria, brushTexto, 2F, y - 7F);
-            }
-
-            g.FillRectangle(brushAnterior, area.Left, 13, 10, 10);
-            g.DrawString(PreviousLabel, fonteLegenda, brushTexto, area.Left + 15, 10);
-
-            g.FillRectangle(brushAtual, area.Left + 125, 13, 10, 10);
-            g.DrawString(CurrentLabel, fonteLegenda, brushTexto, area.Left + 140, 10);
-
-            float grupo = area.Width / (float)Categories.Length;
-            float larguraBarra = Math.Max(8F, grupo * 0.27F);
-
-            for (int i = 0; i < Categories.Length; i++)
-            {
-                float centro = area.Left + grupo * i + grupo / 2F;
-                float alturaAnterior = (float)(PreviousValues[i] / max * area.Height);
-                float alturaAtual = (float)(CurrentValues[i] / max * area.Height);
-
-                RectangleF anterior = new RectangleF(
-                    centro - larguraBarra - 2F,
-                    area.Bottom - alturaAnterior,
-                    larguraBarra,
-                    alturaAnterior);
-
-                RectangleF atual = new RectangleF(
-                    centro + 2F,
-                    area.Bottom - alturaAtual,
-                    larguraBarra,
-                    alturaAtual);
-
-                g.FillRectangle(brushAnterior, anterior);
-                g.FillRectangle(brushAtual, atual);
-
-                string txtAnterior = PreviousValues[i].ToString("N0", CultureInfo.GetCultureInfo("pt-BR"));
-                string txtAtual = CurrentValues[i].ToString("N0", CultureInfo.GetCultureInfo("pt-BR"));
-
-                SizeF sizeAnt = g.MeasureString(txtAnterior, fonteValor);
-                SizeF sizeAtu = g.MeasureString(txtAtual, fonteValor);
-
-                g.DrawString(txtAnterior, fonteValor, brushTexto,
-                    anterior.X + anterior.Width / 2F - sizeAnt.Width / 2F,
-                    anterior.Y - 16F);
-
-                g.DrawString(txtAtual, fonteValor, brushTexto,
-                    atual.X + atual.Width / 2F - sizeAtu.Width / 2F,
-                    atual.Y - 16F);
-
-                string categoria = Categories[i];
-                SizeF sizeCat = g.MeasureString(categoria, fonteCategoria);
-                g.DrawString(categoria, fonteCategoria, brushTexto,
-                    centro - sizeCat.Width / 2F,
-                    area.Bottom + 8F);
-            }
+            public string Nome { get; set; } = "";
+            public double Anterior { get; set; }
+            public double Atual { get; set; }
+            public double Diferenca { get; set; }
         }
     }
 }
