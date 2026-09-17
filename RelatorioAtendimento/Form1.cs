@@ -1863,81 +1863,288 @@ namespace RelatorioAtendimento
                 Periodo = DescobrirPeriodo(wb, caminho)
             };
 
-            // Conversas
-            var wsRelacao = ObterAba(wb, "Relação Conversas-Atendimento");
+            // =====================================================
+            // CONVERSAS
+            // Aceita variações do nome da aba e do texto de total.
+            // Junho, por exemplo, usa "TOTAL NA SEMANA" mesmo sendo
+            // o consolidado mensal; julho/agosto usam "TOTAL MÊS".
+            // =====================================================
+            var wsRelacao = ObterAba(
+                wb,
+                "Relação Conversas-Atendimento",
+                "Relacao Conversas Atendimento",
+                "Conversas-Atendimento");
+
             if (wsRelacao != null)
-                d.Conversas = ProcurarValorAposRotulo(wsRelacao, "TOTAL MÊS", colunasADireita: 2);
+                d.Conversas = ProcurarTotalConversas(wsRelacao);
 
-            // Novos contatos
-            var wsMensagens = ObterAba(wb, "Mensagens por número");
+            // =====================================================
+            // NOVOS CONTATOS
+            // =====================================================
+            var wsMensagens = ObterAba(
+                wb,
+                "Mensagens por número",
+                "Mensagens por numero",
+                "Mensagem por número",
+                "Mensagem por numero");
+
             if (wsMensagens != null)
-                d.NovosContatos = ProcurarPrimeiroTotal(wsMensagens, 1, 2, 45);
+                d.NovosContatos =
+                    ProcurarPrimeiroTotal(
+                        wsMensagens,
+                        1,
+                        2,
+                        50);
 
-            // Finalizados
-            var wsFinal = ObterAba(wb, "Atendimentos finalizados");
+            // =====================================================
+            // ATENDIMENTOS FINALIZADOS
+            // Junho: "Atendimento finalizado"
+            // Julho/Agosto: "Atendimentos finalizados"
+            // =====================================================
+            var wsFinal = ObterAba(
+                wb,
+                "Atendimentos finalizados",
+                "Atendimento finalizado",
+                "Atendimentos finalizado",
+                "Atendimento finalizados");
+
             if (wsFinal != null)
             {
-                d.AtendentesFinalizados = LerListaNomeValor(wsFinal, pararEmTotal: true);
-                d.Finalizados = ProcurarUltimoTotal(wsFinal);
+                d.AtendentesFinalizados =
+                    LerListaNomeValor(
+                        wsFinal,
+                        pararEmTotal: true);
+
+                d.Finalizados =
+                    ProcurarUltimoTotal(wsFinal);
             }
 
-            // Motivos
-            var wsMotivos = ObterAba(wb, "Motivos Atendimento");
+            // =====================================================
+            // MOTIVOS
+            // Junho: "Motivo de atendimento"
+            // Julho/Agosto: "Motivos Atendimento"
+            // =====================================================
+            var wsMotivos = ObterAba(
+                wb,
+                "Motivos Atendimento",
+                "Motivo de atendimento",
+                "Motivos de atendimento",
+                "Motivo Atendimento");
+
             if (wsMotivos != null)
             {
-                d.Motivos = LerMotivosPrincipais(wsMotivos);
-                d.Inatividade = ValorPorDescricao(d.Motivos, "Encerrado por inatividade do cliente");
-                d.OrcamentoFormula = ValorPorDescricao(d.Motivos, "Orçamento de fórmula");
+                d.Motivos =
+                    LerMotivosPrincipais(wsMotivos);
 
-                d.OrcamentoFormulaPossivelVenda = ProcurarValorNaSecao(
-                    wsMotivos, "Possível venda", "Orçamento de fórmula");
+                d.Inatividade =
+                    ValorPorDescricao(
+                        d.Motivos,
+                        "Encerrado por inatividade do cliente");
+
+                d.OrcamentoFormula =
+                    ValorPorDescricao(
+                        d.Motivos,
+                        "Orçamento de fórmula");
+
+                d.OrcamentoFormulaPossivelVenda =
+                    ProcurarValorEmSecoes(
+                        wsMotivos,
+                        new[]
+                        {
+                            "Possível venda",
+                            "Possivel venda",
+                            "Possível compra",
+                            "Possivel compra"
+                        },
+                        "Orçamento de fórmula");
             }
 
-            // Templates
-            var wsTemplate = ObterAba(wb, "Mensagem Template");
+            // =====================================================
+            // TEMPLATE / REAGENDAMENTOS
+            // Em alguns meses "reagendamento" está na coluna A;
+            // em junho o texto explicativo está na coluna C e o
+            // valor numérico está ao lado.
+            // =====================================================
+            var wsTemplate = ObterAba(
+                wb,
+                "Mensagem Template",
+                "Mensagens Template",
+                "Template");
+
             if (wsTemplate != null)
             {
-                d.Reagendamentos = ProcurarPorInicioDeTexto(
-                    wsTemplate, new[] { "Reagendamento", "Reagendamentos entregues" });
+                d.Reagendamentos =
+                    ProcurarReagendamentos(
+                        wsTemplate);
 
-                d.TemplatesTotal = ProcurarUltimoTotal(wsTemplate);
+                d.TemplatesTotal =
+                    ProcurarUltimoTotal(
+                        wsTemplate);
             }
 
-            // Marketing
-            var wsMarketing = ObterAba(wb, "Marketing");
+            // =====================================================
+            // MARKETING
+            // =====================================================
+            var wsMarketing = ObterAba(
+                wb,
+                "Marketing");
+
             if (wsMarketing != null)
             {
-                d.MarketingCriativos = LerMarketing(wsMarketing);
-                d.MarketingTotal = ProcurarUltimoTotal(wsMarketing);
+                d.MarketingCriativos =
+                    LerMarketing(wsMarketing);
+
+                d.MarketingTotal =
+                    ProcurarUltimoTotal(
+                        wsMarketing);
             }
 
+            // =====================================================
             // TMR / TME / TMA
-            var wsTmr = ObterAba(wb, "TMR");
-            if (wsTmr != null) d.TMR = LerNomeTempo(wsTmr);
+            // Junho usa "Média TMR/TME/TMA".
+            // Julho/Agosto usam apenas "TMR/TME/TMA".
+            // =====================================================
+            var wsTmr = ObterAba(
+                wb,
+                "TMR",
+                "Média TMR",
+                "Media TMR");
 
-            var wsTme = ObterAba(wb, "TME");
-            if (wsTme != null) d.TME = LerNomeTempo(wsTme);
+            if (wsTmr != null)
+                d.TMR = LerNomeTempo(wsTmr);
 
-            var wsTma = ObterAba(wb, "TMA");
-            if (wsTma != null) d.TMA = LerNomeTempo(wsTma);
+            var wsTme = ObterAba(
+                wb,
+                "TME",
+                "Média TME",
+                "Media TME");
 
-            // Notas
-            var wsNotas = ObterAba(wb, "MEDIA - IND") ?? ObterAba(wb, "Média individual");
+            if (wsTme != null)
+                d.TME = LerNomeTempo(wsTme);
+
+            var wsTma = ObterAba(
+                wb,
+                "TMA",
+                "Média TMA",
+                "Media TMA");
+
+            if (wsTma != null)
+                d.TMA = LerNomeTempo(wsTma);
+
+            // =====================================================
+            // NOTAS
+            // Junho: "Média Desempenho"
+            // Julho: "MEDIA - IND"
+            // Outros relatórios: "Média individual"
+            // =====================================================
+            var wsNotas = ObterAba(
+                wb,
+                "MEDIA - IND",
+                "Média individual",
+                "Media individual",
+                "Média Desempenho",
+                "Media Desempenho");
+
             if (wsNotas != null)
             {
-                d.Notas = LerNotas(wsNotas);
-                d.NotaGeral = AjustarNota(ProcurarValorAoLado(wsNotas, "Média geral (W.L + Gurgel)"));
-                d.NotaWL = AjustarNota(ProcurarNotaUnidade(wsNotas, "W.L"));
-                d.NotaGurgel = AjustarNota(ProcurarNotaUnidade(wsNotas, "Gurgel"));
+                d.Notas =
+                    LerNotas(wsNotas);
+
+                double notaGeralEncontrada =
+                    AjustarNota(
+                        ProcurarValorAoLado(
+                            wsNotas,
+                            "Média geral"));
+
+                // Alguns meses, como junho, não possuem a célula
+                // "Média geral". Nesse caso calcula a média ponderada
+                // usando Média x Quantidade de avaliações.
+                d.NotaGeral =
+                    notaGeralEncontrada > 0 &&
+                    notaGeralEncontrada <= 5
+                        ? notaGeralEncontrada
+                        : CalcularMediaGeralNotas(wsNotas);
+
+                d.NotaWL =
+                    AjustarNota(
+                        ProcurarNotaUnidade(
+                            wsNotas,
+                            "W.L"));
+
+                if (d.NotaWL <= 0)
+                {
+                    d.NotaWL =
+                        AjustarNota(
+                            ProcurarNotaUnidade(
+                                wsNotas,
+                                "W.l"));
+                }
+
+                d.NotaGurgel =
+                    AjustarNota(
+                        ProcurarNotaUnidade(
+                            wsNotas,
+                            "Gurgel"));
             }
 
             return d;
         }
 
-        private IXLWorksheet ObterAba(XLWorkbook wb, string nome)
+        private IXLWorksheet ObterAba(
+            XLWorkbook wb,
+            params string[] nomes)
         {
-            string alvo = NormalizarTexto(nome);
-            return wb.Worksheets.FirstOrDefault(w => NormalizarTexto(w.Name) == alvo);
+            if (wb == null ||
+                nomes == null ||
+                nomes.Length == 0)
+            {
+                return null;
+            }
+
+            var alvos =
+                nomes
+                    .Where(
+                        x =>
+                            !string.IsNullOrWhiteSpace(x))
+                    .Select(
+                        NormalizarTexto)
+                    .Where(
+                        x =>
+                            !string.IsNullOrWhiteSpace(x))
+                    .Distinct()
+                    .ToList();
+
+            // 1) Primeiro tenta igualdade exata.
+            foreach (var ws in wb.Worksheets)
+            {
+                string nomeAba =
+                    NormalizarTexto(ws.Name);
+
+                if (alvos.Contains(nomeAba))
+                    return ws;
+            }
+
+            // 2) Depois aceita pequenas variações no nome da aba.
+            // Ex.: "Média TMR" também casa com "TMR".
+            foreach (var ws in wb.Worksheets)
+            {
+                string nomeAba =
+                    NormalizarTexto(ws.Name);
+
+                foreach (string alvo in alvos)
+                {
+                    if (alvo.Length < 3)
+                        continue;
+
+                    if (nomeAba.Contains(alvo) ||
+                        alvo.Contains(nomeAba))
+                    {
+                        return ws;
+                    }
+                }
+            }
+
+            return null;
         }
 
         private string DescobrirPeriodo(XLWorkbook wb, string caminho)
@@ -1972,6 +2179,152 @@ namespace RelatorioAtendimento
             }
 
             return Path.GetFileNameWithoutExtension(caminho);
+        }
+
+        private double ProcurarTotalConversas(
+            IXLWorksheet ws)
+        {
+            var used = ws.RangeUsed();
+
+            if (used == null)
+                return 0;
+
+            int totalColunas =
+                used.ColumnCount();
+
+            // Na relação Conversas-Atendimento, o primeiro TOTAL
+            // da planilha representa o total de conversas.
+            foreach (var row in used.Rows())
+            {
+                int limite =
+                    Math.Min(
+                        4,
+                        totalColunas);
+
+                for (
+                    int c = 1;
+                    c <= limite;
+                    c++)
+                {
+                    string texto =
+                        NormalizarTexto(
+                            row.Cell(c)
+                                .GetFormattedString());
+
+                    if (!texto.StartsWith("total"))
+                        continue;
+
+                    for (
+                        int x = c + 1;
+                        x <= Math.Min(
+                            c + 2,
+                            totalColunas);
+                        x++)
+                    {
+                        var valor =
+                            LerNumero(
+                                row.Cell(x));
+
+                        if (valor.HasValue)
+                            return valor.Value;
+                    }
+                }
+            }
+
+            // Fallback para relatórios que usam explicitamente
+            // "TOTAL MÊS".
+            return ProcurarValorAposRotulo(
+                ws,
+                "TOTAL MÊS",
+                3);
+        }
+
+        private double ProcurarReagendamentos(
+            IXLWorksheet ws)
+        {
+            var used = ws.RangeUsed();
+
+            if (used == null)
+                return 0;
+
+            int totalColunas =
+                used.ColumnCount();
+
+            foreach (var cell in used.Cells())
+            {
+                string texto =
+                    NormalizarTexto(
+                        cell.GetFormattedString());
+
+                if (!texto.Contains("reagendamento"))
+                    continue;
+
+                int linha =
+                    cell.Address.RowNumber;
+
+                int coluna =
+                    cell.Address.ColumnNumber;
+
+                // Procura valores na mesma linha, tanto à direita
+                // quanto à esquerda do texto.
+                for (
+                    int distancia = 1;
+                    distancia <= 3;
+                    distancia++)
+                {
+                    int direita =
+                        coluna + distancia;
+
+                    if (direita <= totalColunas)
+                    {
+                        var valor =
+                            LerNumero(
+                                ws.Cell(
+                                    linha,
+                                    direita));
+
+                        if (valor.HasValue)
+                            return valor.Value;
+                    }
+
+                    int esquerda =
+                        coluna - distancia;
+
+                    if (esquerda >= 1)
+                    {
+                        var valor =
+                            LerNumero(
+                                ws.Cell(
+                                    linha,
+                                    esquerda));
+
+                        if (valor.HasValue)
+                            return valor.Value;
+                    }
+                }
+            }
+
+            return 0;
+        }
+
+        private double ProcurarValorEmSecoes(
+            IXLWorksheet ws,
+            IEnumerable<string> secoes,
+            string item)
+        {
+            foreach (string secao in secoes)
+            {
+                double valor =
+                    ProcurarValorNaSecao(
+                        ws,
+                        secao,
+                        item);
+
+                if (valor != 0)
+                    return valor;
+            }
+
+            return 0;
         }
 
         private double ProcurarValorAposRotulo(IXLWorksheet ws, string rotulo, int colunasADireita)
@@ -2170,7 +2523,10 @@ namespace RelatorioAtendimento
                 var v = LerNumero(ws.Cell(r, 3));
                 if (!v.HasValue) continue;
 
-                dict[criativo] = v.Value;
+                if (dict.ContainsKey(criativo))
+                    dict[criativo] += v.Value;
+                else
+                    dict[criativo] = v.Value;
             }
 
             return dict;
@@ -2201,50 +2557,167 @@ namespace RelatorioAtendimento
             return dict;
         }
 
-        private Dictionary<string, double> LerNotas(IXLWorksheet ws)
+        private Dictionary<string, double> LerNotas(
+            IXLWorksheet ws)
         {
-            var dict = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-            int ultima = ws.LastRowUsed()?.RowNumber() ?? 0;
+            var dict =
+                new Dictionary<string, double>(
+                    StringComparer.OrdinalIgnoreCase);
 
-            for (int r = 1; r <= ultima; r++)
+            int ultima =
+                ws.LastRowUsed()?.RowNumber()
+                ?? 0;
+
+            for (
+                int r = 1;
+                r <= ultima;
+                r++)
             {
-                string nome = ws.Cell(r, 1).GetFormattedString().Trim();
-                string norm = NormalizarTexto(nome);
+                string nome =
+                    ws.Cell(r, 1)
+                        .GetFormattedString()
+                        .Trim();
 
-                if (string.IsNullOrWhiteSpace(nome)) continue;
-                if (norm.StartsWith("atendentes wl") ||
-                    norm.StartsWith("atendentes gu") ||
-                    norm.StartsWith("media unidade") ||
-                    norm.StartsWith("nota") ||
-                    norm.StartsWith("total"))
+                if (string.IsNullOrWhiteSpace(nome))
                     continue;
 
-                var nota = LerNumero(ws.Cell(r, 2));
+                string norm =
+                    NormalizarTexto(nome);
+
+                // Ignora cabeçalhos e linhas-resumo.
+                if (norm.StartsWith("atendentes") ||
+                    norm.StartsWith("atendente ") ||
+                    norm.StartsWith("media desempenho") ||
+                    norm.StartsWith("media unidade") ||
+                    norm.StartsWith("nota") ||
+                    norm.StartsWith("total") ||
+                    norm == "gurgel" ||
+                    norm == "w.l" ||
+                    norm == "wl")
+                {
+                    continue;
+                }
+
+                var nota =
+                    LerNumero(
+                        ws.Cell(r, 2));
 
                 if (!nota.HasValue)
                     continue;
 
-                // Corrige casos em que "4.88" é interpretado como 488,
-                // "4.93" como 493 etc.
-                double notaCorrigida = AjustarNota(nota.Value);
+                double notaCorrigida =
+                    AjustarNota(
+                        nota.Value);
 
-                if (notaCorrigida < 0 || notaCorrigida > 5)
+                if (notaCorrigida < 0 ||
+                    notaCorrigida > 5)
+                {
                     continue;
+                }
 
-                // Só aceita nomes que parecem atendentes.
-                if (!(nome.Contains("-") ||
-                      nome.Contains("W. Luiz", StringComparison.OrdinalIgnoreCase) ||
-                      nome.Contains("Gurgel", StringComparison.OrdinalIgnoreCase) ||
-                      nome.Contains("Maria Angela", StringComparison.OrdinalIgnoreCase)))
+                // Na planilha de desempenho a coluna C é a
+                // quantidade de avaliações. Se existir texto ali,
+                // provavelmente não é uma linha de atendente.
+                var quantidade =
+                    LerNumero(
+                        ws.Cell(r, 3));
+
+                if (!quantidade.HasValue &&
+                    ws.Cell(r, 3)
+                        .GetFormattedString()
+                        .Trim()
+                        .Length > 0)
+                {
                     continue;
+                }
 
-                string chave = NormalizarNome(nome);
+                string chave =
+                    NormalizarNome(nome);
 
                 if (!dict.ContainsKey(chave))
-                    dict[chave] = notaCorrigida;
+                {
+                    dict[chave] =
+                        notaCorrigida;
+                }
             }
 
             return dict;
+        }
+
+        private double CalcularMediaGeralNotas(
+            IXLWorksheet ws)
+        {
+            double somaPonderada = 0;
+            double totalAvaliacoes = 0;
+
+            int ultima =
+                ws.LastRowUsed()?.RowNumber()
+                ?? 0;
+
+            for (
+                int r = 1;
+                r <= ultima;
+                r++)
+            {
+                string nome =
+                    ws.Cell(r, 1)
+                        .GetFormattedString()
+                        .Trim();
+
+                if (string.IsNullOrWhiteSpace(nome))
+                    continue;
+
+                string norm =
+                    NormalizarTexto(nome);
+
+                if (norm.StartsWith("atendentes") ||
+                    norm.StartsWith("atendente ") ||
+                    norm.StartsWith("media desempenho") ||
+                    norm.StartsWith("media unidade") ||
+                    norm.StartsWith("nota") ||
+                    norm.StartsWith("total"))
+                {
+                    continue;
+                }
+
+                var notaOriginal =
+                    LerNumero(
+                        ws.Cell(r, 2));
+
+                var quantidade =
+                    LerNumero(
+                        ws.Cell(r, 3));
+
+                if (!notaOriginal.HasValue ||
+                    !quantidade.HasValue ||
+                    quantidade.Value <= 0)
+                {
+                    continue;
+                }
+
+                double nota =
+                    AjustarNota(
+                        notaOriginal.Value);
+
+                if (nota < 0 ||
+                    nota > 5)
+                {
+                    continue;
+                }
+
+                somaPonderada +=
+                    nota *
+                    quantidade.Value;
+
+                totalAvaliacoes +=
+                    quantidade.Value;
+            }
+
+            if (totalAvaliacoes <= 0)
+                return 0;
+
+            return somaPonderada /
+                   totalAvaliacoes;
         }
 
         private double ProcurarValorAoLado(IXLWorksheet ws, string rotulo)
